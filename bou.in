@@ -1,0 +1,28 @@
+N1	N2	N3	NSST(>1=RK,else AB)	NWRIT	NREAD
+129	33	129	3					1		0
+N1P	N2P	N3P(passo plottaggio)
+1	1	1
+NTST			TPRINT	TPIN	TMAX	IRESET
+20000000	20.0		0.1		400.	0
+ALX3D           ISTR3 STR3  RMED31  ETDP3 STRB3
+3.141592653589  -1    1.00  3.40    .60   2.00
+STRR  REXT  RINT  ISTR  RMED  ETDP  STRB
+0.500 10.0  9.    0     .25   .65   2.0000
+RAY     RI(=ROS^2)  ROS   PRA   DT    RESID CFLMAX
+1.00e6  0.2175      1.00  1.000 1.e-6 1.e5  1.0
+inslwri inslwr  ifugo icorio  ibuo  isca  ivisc (=1 N-S, =0 Euler)
+0       1       0     1       0     1     1
+EPSIL(=pert. seno)  LAMB  RPER(=pert. random) NSECT(0 tutto, 1 lamb)
+0.010               1     0.05                0
+ISTAT TIMEAV  TIMERMS IRESTA
+0     30.     40.     0
+NLEV  DISM  NN
+10    0.100 30
+IDTV(0=dt fisso,1=var.) DTMAX(per dt var.)  CFLLIM(per dt fisso)
+1                       0.0750              4.0
+NINI  NFIN  NSTRI
+1     15    1
+NSON (numero di sonde (max. 400))
+4
+IFORC (0 no-forcing, 1 random forc.)
+1
