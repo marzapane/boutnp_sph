@@ -89,6 +89,8 @@ c
         read(15,301) dummy
         read(15,*) nson
         read(15,301) dummy
+        read(15,*) indexForInitial
+        read(15,301) dummy
         read(15,*) iforc
 301     format(a4)
       close(15)
@@ -153,9 +155,10 @@ c
         rom(1)=0.
         rom(2)=-17./60.
         rom(3)=-5./12.
-        write(6,100) (gam(n),n=1,nsst),(rom(n),n=1,nsst)
-  100   format(/,5x,'The time scheme is a III order Runge-Kutta'
-     %  ,4x,'gam= ',3f8.3,4x,'ro= ',3f8.3)
+        write(6,100)
+  100   format(/,5x,'The time scheme is a III order Runge-Kutta')
+        write(6,101) (gam(n),n=1,nsst),(rom(n),n=1,nsst)
+  101   format(/,5x,'gam= ',3f8.3,4x,'ro= ',3f8.3)
       else
         gam(1)=1.5
         gam(2)=0.
@@ -163,9 +166,10 @@ c
         rom(1)=-0.5
         rom(2)=0.
         rom(3)=0.
-        write(6,110) gam(1),rom(1)
-  110   format(/,5x,'The time scheme is the Adams-Bashfort',4x,
-     %   'gam= ',f8.3,4x,'ro= ',f8.3)
+        write(6,110)
+  110   format(/,5x,'The time scheme is the Adams-Bashfort')
+        write(6,111) gam(1),rom(1)
+  111   format(/,5x,'gam= ',f8.3,4x,'ro= ',f8.3)
       endif
       do 10 ns=1,nsst
         alm(ns)=(gam(ns)+rom(ns))
@@ -240,10 +244,11 @@ c
       qtot=0.
       qmax=0.
 !$OMP  PARALLEL DO
-!$OMP$ SHARED(n3m,n2m,n1m,ipv,usrm)
-!$OMP$ SHARED(q1,q2,q3,dx1,udx2m,udx3m)
-!$OMP$ PRIVATE(kp,jp,ip,dqcap,ic,jc,kc)
+!$OMP$ SHARED(n3m,n2m,n1m,ipv,usrm,usinpm)
+!$OMP$ SHARED(q1,q2,q3,dx1,udx2m,udx3m,rm)
+!$OMP$ PRIVATE(kp,jp,ip,dqcap,ic,jc,kc,fact)
 !$OMP$ REDUCTION(max:qmax)
+!$OMP$ REDUCTION(+:qtot)
       do 11 kc=1,n3m
         kp=kc+1
         do 11 jc=1,n2m
@@ -255,22 +260,22 @@ c
      %               (q2(ic,jp,kc)-q2(ic,jc,kc))*udx2m(jc)
      %              +((q1(ip,jc,kc)-q1(ic,jc,kc))*dx1
      %              + (q3(ic,jc,kp)-q3(ic,jc,kc))*udx3m(kc))*fact
-     %                          )
-c             qmax = max(abs(dqcap),qmax)
-             if(abs(dqcap).gt.qmax) then
-                imxq=ic
-                jmxq=jc
-                kmxq=kc
-                qmax = abs(dqcap)
-             endif
-c            qmax = max(abs(dqcap),qmax)
-             qtot=qtot+dqcap*rm(jc)*g2rm(jc)*g3rm(kc)
+     %               )
+              qmax = max(abs(dqcap),qmax)
+c             if(abs(dqcap).gt.qmax) then
+c               imxq=ic
+c               jmxq=jc
+c               kmxq=kc
+c               qmax = abs(dqcap)
+c             endif
+              qtot=qtot+dqcap*rm(jc)*g2rm(jc)*g3rm(kc)
    11 continue
 !$OMP  END PARALLEL DO
       qqmax=qmax
       qtot=qtot*dvol
-       write(6,*) ' QMAX = ',qmax,' @ i,j,k = ',imxq,jmxq,kmxq
-       write(6,*) ' QTOT = ',qtot
+      write(6,*) ' QMAX = ',qmax
+c     write(6,*) ' QMAX = ',qmax,' @ i,j,k = ',imxq,jmxq,kmxq
+      write(6,*) ' QTOT = ',qtot
       return
       end
 c
@@ -281,11 +286,10 @@ c***********************************************************************
       pi=2.d0*asin(1.d0)
       if(nsect.eq.0) then
       dx1=2.*pi/float(n1m)
-       else
+        else
       dx1=2.*pi/(float(n1m)*float(lamb))
-       endif
+        endif
       dx2=1.d0/float(n2m)
-
 !     dx3=pi/(float(n3m))
       dx3=1.d0/(float(n3m))
       write(6,*)'dx1, dx2, dx3  ',dx1,dx2,dx3
@@ -306,7 +310,8 @@ c
         vmax2=0.
         vmax3=0.
 !$OMP  PARALLEL DO
-!$OMP$ SHARED(n3m,n2m,n1m)
+!$OMP$ SHARED(n3m,n2m,n1m,q1,q2,q3)
+!$OMP$ PRIVATE(i,j,k)
 !$OMP$ REDUCTION(max:vmax1)
 !$OMP$ REDUCTION(max:vmax2)
 !$OMP$ REDUCTION(max:vmax3)
@@ -318,10 +323,10 @@ c
               vmax3 = max(vmax3,abs(q3(i,j,k)))
   312   continue
 !$OMP  END PARALLEL DO
-       vmax(1) = vmax1
-       vmax(2) = vmax2
-       vmax(3) = vmax3
-      return
+        vmax(1) = vmax1
+        vmax(2) = vmax2
+        vmax(3) = vmax3
+        return
       end
 c
 c
@@ -373,7 +378,6 @@ c
           eta(j)=1.d0 + tanh(strr*(x2-1.d0))/tstr2
           rc(j)=rint + eta(j)*(rext-rint)
         enddo
-        print *,rc
       end if
 c
 c     CLUSTERING AT THE EXTERNAL RADIAL WALL
@@ -1691,98 +1695,98 @@ c
       n1md=n1m+2
       ffat(1) = pi
       do i = 2,n1mh
-      ffat(i) = 2.*pi
+        ffat(i) = 2.*pi
       end do
-      do 111 j=2,n2
-      rtr(j)=1./rc(j)
- 111  continue
       rtr(1)=1.
+      do 111 j=2,n2
+        rtr(j)=1./rc(j)
+ 111  continue
       do 1 j=1,n2
         do 11 k=1,n3m
-        xxr(1,k)=q2(n1m,j,k)*rtr(j)
+          xxr(1,k)=q2(n1m,j,k)*rtr(j)
           do 21 i=1,n1m
-          is=i+1
-          xxr(is,k)=q2(i,j,k)*rtr(j)
+            is=i+1
+            xxr(is,k)=q2(i,j,k)*rtr(j)
    21     continue
-        xxr(n1md,k)=q2(1,j,k)*rtr(j)
+          xxr(n1md,k)=q2(1,j,k)*rtr(j)
    11   continue
 c
 c     fft applied to the (q_2) by fft99
 c   from physical to wave number space
 c
         call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
-          do 31 i=1,n1mh
+        do 31 i=1,n1mh
           ip=2*i
           id=2*i-1
-            do 41 k=1,n3m
+          do 41 k=1,n3m
             iadd=i+(j-1)*n1m+(k-1)*n1m*n2m
             rhs(iadd )=real( cmplx( xxr(id,k),xxr(ip,k))*
-     1            conjg(cmplx( xxr(id,k),xxr(ip,k)) )  )
-  41        continue
-  31      continue
+     1          conjg(cmplx( xxr(id,k),xxr(ip,k)) )  )
+  41      continue
+  31    continue
+   1  continue
 c
 c
-    1 continue
       do 2 j=1,n2m
-      do 12 k=1,n3m
-      xxr(1,k)=q1(n1m,j,k)
-      do 22 i=1,n1m
-      is=i+1
-      xxr(is,k)=q1(i,j,k)
-   22 continue
-      xxr(n1md,k)=q1(1,j,k)
-   12 continue
+        do 12 k=1,n3m
+          xxr(1,k)=q1(n1m,j,k)
+          do 22 i=1,n1m
+            is=i+1
+            xxr(is,k)=q1(i,j,k)
+   22     continue
+          xxr(n1md,k)=q1(1,j,k)
+   12   continue
 c
 c     fft applied to the (q_1) by fft99
 c   from physical to wave number space
 c
-      call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
-      do 32 i=1,n1mh
-      ip=2*i
-      id=2*i-1
-      do 42 k=1,n3m
-      iadd=i+(j-1)*n1m+(k-1)*n1m*n2m
-      rhs(iadd )=rhs(iadd )+real( cmplx( xxr(id,k),xxr(ip,k))*
-     1            conjg(cmplx( xxr(id,k),xxr(ip,k)) )  )
-  42  continue
-  32  continue
+        call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
+        do 32 i=1,n1mh
+          ip=2*i
+          id=2*i-1
+          do 42 k=1,n3m
+            iadd=i+(j-1)*n1m+(k-1)*n1m*n2m
+            rhs(iadd )=rhs(iadd )+real( cmplx( xxr(id,k),xxr(ip,k))*
+     1                conjg(cmplx( xxr(id,k),xxr(ip,k)) )  )
+  42        continue
+  32    continue
+   2  continue
 c
 c
-    2 continue
       do 3 j=1,n2m
-      do 13 k=1,n3m
-      xxr(1,k)=q3(n1m,j,k)
-      do 23 i=1,n1m
-      is=i+1
-      xxr(is,k)=q3(i,j,k)
-   23 continue
-      xxr(n1md,k)=q3(1,j,k)
-   13 continue
+        do 13 k=1,n3m
+          xxr(1,k)=q3(n1m,j,k)
+          do 23 i=1,n1m
+            is=i+1
+            xxr(is,k)=q3(i,j,k)
+   23     continue
+          xxr(n1md,k)=q3(1,j,k)
+   13   continue
 c
 c     fft applied to the (q_3) by fft99
 c   from physical to wave number space
 c
-      call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
-      do 33 i=1,n1mh
-      ip=2*i
-      id=2*i-1
-      do 43 k=1,n3m
-      iadd=i+(j-1)*n1m+(k-1)*n1m*n2m
-      rhs(iadd )=rhs(iadd )+real( cmplx( xxr(id,k),xxr(ip,k))*
-     1            conjg(cmplx( xxr(id,k),xxr(ip,k)) )  )
-  43  continue
-  33  continue
+        call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
+        do 33 i=1,n1mh
+          ip=2*i
+          id=2*i-1
+          do 43 k=1,n3m
+            iadd=i+(j-1)*n1m+(k-1)*n1m*n2m
+            rhs(iadd )=rhs(iadd )+real( cmplx( xxr(id,k),xxr(ip,k))*
+     1                conjg(cmplx( xxr(id,k),xxr(ip,k)) )  )
+  43      continue
+  33    continue
+   3  continue
 c
 c
-    3 continue
 c***********************************************************************
 c***********************************************************************
       do 116 i=1,n1mh
-      ener(i)=0.
-      do 116 k=1,n3m
-      do 116 j=1,n2m
-      iadd=i+(j-1)*n1m+(k-1)*n1m*n2m
-      ener(i)=ener(i)+ffat(i)*rhs(iadd )*rm(j)*g2rm(j)*g3rm(k)*dvol
+        ener(i)=0.
+        do 116 k=1,n3m
+          do 116 j=1,n2m
+            iadd=i+(j-1)*n1m+(k-1)*n1m*n2m
+            ener(i)=ener(i)+ffat(i)*rhs(iadd )*rm(j)*g2rm(j)*g3rm(k)*dvol
  116  continue
       open(39,file=filen,status='unknown')
       write(39,546) time,(ener(i),i=nini,nfin,nstri)
@@ -1802,14 +1806,14 @@ c
 !$OMP$ REDUCTION(max:cflm)
       do 7 k=1,n3m
         kp=k+1
-          do 7 j=1,n2m
-            jp=j+1
-              do 7 i=1,n1m
-                ip=ipv(i)
-                qcf=((
-     %               +abs((q2(i,j,k)+q2(i,jp,k))*0.5*udx2rm(j)))
-     %               +abs((q3(i,j,k)+q3(i,j,kp))*0.5*udx3m(k)))
-                cflm = max(cflm,qcf)
+        do 7 j=1,n2m
+          jp=j+1
+          do 7 i=1,n1m
+            ip=ipv(i)
+            qcf=((
+     %           +abs((q2(i,j,k)+q2(i,jp,k))*0.5*udx2rm(j)))
+     %           +abs((q3(i,j,k)+q3(i,j,kp))*0.5*udx3m(k)))
+            cflm = max(cflm,qcf)
   7   continue
 !$OMP  END PARALLEL DO
       return
@@ -1828,61 +1832,61 @@ c     go to 7766
 c     Spherical components
 
       do kc=2,n3m
-c      km=kmv(kc)
-       km=kc-1
-       kp=kpv(kc)
+c       km=kmv(kc)
+        km=kc-1
+c       kp=kpv(kc)
         do jc=2,n2
-c       jm=jmv(jc)
-        jm=jc-1
-        jp=jpv(jc)
-         do ic=1,n1m
-         im=imv(ic)
-         ip=ipv(ic)
-         ksy = ksym(kc)
-         isy = isym(ic)
+c         jm=jmv(jc)
+          jm=jc-1
+c         jp=jpv(jc)
+          do ic=1,n1m
+            im=imv(ic)
+c           ip=ipv(ic)
+c           ksy = ksym(kc)
+c           isy = isym(ic)
 c Cartesian coordinates
-          xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
-          yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
-          zzz = rc(jc)*cos(zz(kc))
+c           xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
+c           yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
+c           zzz = rc(jc)*cos(zz(kc))
 c velocities at the cell nodes
-          vt = 0.25*(q1(ic,jc,kc)+q1(ic,jm,kc)
-     %              +q1(ic,jc,km)+q1(ic,jm,km))
-          vr = 0.25*(q2(ic,jc,kc)+q2(im,jc,kc)
-     %               +q2(ic,jc,km)+q2(im,jc,km))/rc(jc)**2
-          vp = 0.25*(q3(ic,jc,kc)+q3(im,jc,kc)
-     %              +q3(ic,jm,kc)+q3(im,jm,kc))/sin(zz(kc))
-      vx(ic,jc,kc) = vt
-      vy(ic,jc,kc) = vr
-      vz(ic,jc,kc) = vp
-      prc(ic,jc,kc)= 0.125*(pr(ic,jc,kc)+pr(ic,jm,kc)
-     %                     +pr(ic,jc,km)+pr(ic,jm,km) 
-     %                     +pr(im,jc,kc)+pr(im,jm,kc)
-     %                     +pr(im,jc,km)+pr(im,jm,km) )
-      temp(ic,jc,kc)= 0.125*(dens(ic,jc,kc)+dens(ic,jm,kc)
-     %                     +dens(ic,jc,km)+dens(ic,jm,km) 
-     %                     +dens(im,jc,kc)+dens(im,jm,kc)
-     %                     +dens(im,jc,km)+dens(im,jm,km) )
-            end do
+            vt = 0.25*(q1(ic,jc,kc)+q1(ic,jm,kc)
+     %                +q1(ic,jc,km)+q1(ic,jm,km))
+            vr = 0.25*(q2(ic,jc,kc)+q2(im,jc,kc)
+     %                 +q2(ic,jc,km)+q2(im,jc,km))/rc(jc)**2
+            vp = 0.25*(q3(ic,jc,kc)+q3(im,jc,kc)
+     %                +q3(ic,jm,kc)+q3(im,jm,kc))/sin(zz(kc))
+            vx(ic,jc,kc) = vt
+            vy(ic,jc,kc) = vr
+            vz(ic,jc,kc) = vp
+            prc(ic,jc,kc)= 0.125*(pr(ic,jc,kc)+pr(ic,jm,kc)
+     %                           +pr(ic,jc,km)+pr(ic,jm,km) 
+     %                           +pr(im,jc,kc)+pr(im,jm,kc)
+     %                           +pr(im,jc,km)+pr(im,jm,km) )
+            temp(ic,jc,kc)= 0.125*(dens(ic,jc,kc)+dens(ic,jm,kc)
+     %                           +dens(ic,jc,km)+dens(ic,jm,km) 
+     %                           +dens(im,jc,kc)+dens(im,jm,kc)
+     %                           +dens(im,jc,km)+dens(im,jm,km) )
           end do
         end do
+      end do
 c North pole
-       kc=1
-       kp=kpv(kc)
-        do jc=2,n2
+      kc=1
+      kp=kpv(kc)
+      do jc=2,n2
 c       jm=jmv(jc)
         jm=jc-1
-        jp=jpv(jc)
-         do ic=1,n1m
-         im=imv(ic)
-         ip=ipv(ic)
-         ksy = ksym(kc)
-         ksc = ksyc(kc)
-         isy = isym(ic)
-         isyx = isym(im)
+c       jp=jpv(jc)
+        do ic=1,n1m
+c         im=imv(ic)
+          ip=ipv(ic)
+c         ksy = ksym(kc)
+c         ksc = ksyc(kc)
+          isy = isym(ic)
+c         isyx = isym(im)
 c Cartesian coordinates
-          xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
-          yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
-          zzz = rc(jc)*cos(zz(kc))
+c         xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
+c         yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
+c         zzz = rc(jc)*cos(zz(kc))
 c velocities at the cell nodes
           vt = 0.25*(q1(ic,jc,kc)-q1(isy,jc,kc)
      %              + q1(ic,jm,kc)-q1(isy,jm,kc))
@@ -1895,33 +1899,33 @@ c         vp = 0.125*(q3(ic,jc,kp)-q3(isy,jc,kp)
 c    %     +q3(im,jc,kp)-q3(isyx,jc,kp)
 c    %     +q3(ic,jm,kp)-q3(isy,jm,kp)
 c    %     +q3(im,jm,kp)-q3(isyx,jm,kp)  )/sin(zz(kp))
-      vx(ic,jc,kc) = vt
-      vy(ic,jc,kc) = vr
-      vz(ic,jc,kc) = vp
-      prc(ic,jc,kc) = 0.25*(pr(ic,jc,kc)+pr(isy,jc,kc)
-     %                     +pr(ic,jm,kc)+pr(isy,jm,kc))
-      temp(ic,jc,kc) = 0.25*(dens(ic,jc,kc)+dens(isy,jc,kc)
-     %                     +dens(ic,jm,kc)+dens(isy,jm,kc))
-            end do
+          vx(ic,jc,kc) = vt
+          vy(ic,jc,kc) = vr
+          vz(ic,jc,kc) = vp
+          prc(ic,jc,kc) = 0.25*(pr(ic,jc,kc)+pr(isy,jc,kc)
+     %                         +pr(ic,jm,kc)+pr(isy,jm,kc))
+          temp(ic,jc,kc) = 0.25*(dens(ic,jc,kc)+dens(isy,jc,kc)
+     %                         +dens(ic,jm,kc)+dens(isy,jm,kc))
         end do
+      end do
 c South pole
-       kc=n3
-       km=n3m
-        do jc=2,n2
+      kc=n3
+      km=n3m
+      do jc=2,n2
 c       jm=jmv(jc)
         jm=jc-1
-        jp=jpv(jc)
-         do ic=1,n1m
-         im=imv(ic)
-         ip=ipv(ic)
-         ksy = ksym(kc)
-         ksc = ksyc(kc)
-         isy = isym(ic)
-         isyx = isym(im)
+c       jp=jpv(jc)
+        do ic=1,n1m
+c         im=imv(ic)
+c         ip=ipv(ic)
+c         ksy = ksym(kc)
+c         ksc = ksyc(kc)
+          isy = isym(ic)
+c         isyx = isym(im)
 c Cartesian coordinates
-          xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
-          yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
-          zzz = rc(jc)*cos(zz(kc))
+c         xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
+c         yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
+c         zzz = rc(jc)*cos(zz(kc))
 c velocities at the cell nodes
           vt = 0.25*(q1(ic,jc,kc)-q1(isy,jc,kc)
      %              + q1(ic,jm,kc)-q1(isy,jm,kc))
@@ -1934,36 +1938,35 @@ c         vp = 0.125*(q3(ic,jc,km)-q3(isy,jc,km)
 c    %     +q3(im,jc,km)-q3(isyx,jc,km)
 c    %     +q3(ic,jm,km)-q3(isy,jm,km)
 c    %     +q3(im,jm,km)-q3(isyx,jm,km)  )/sin(zz(km))
-
-      vx(ic,jc,kc) = vt
-      vy(ic,jc,kc) = vr
-      vz(ic,jc,kc) = vp
-      prc(ic,jc,kc) = 0.25*(pr(ic,jc,km)+pr(isy,jc,km)
-     %                     +pr(ic,jm,km)+pr(isy,jm,km))
-      temp(ic,jc,kc) = 0.25*(dens(ic,jc,km)+dens(isy,jc,km)
-     %                     +dens(ic,jm,km)+dens(isy,jm,km))
-            end do
+          vx(ic,jc,kc) = vt
+          vy(ic,jc,kc) = vr
+          vz(ic,jc,kc) = vp
+          prc(ic,jc,kc) = 0.25*(pr(ic,jc,km)+pr(isy,jc,km)
+     %                         +pr(ic,jm,km)+pr(isy,jm,km))
+          temp(ic,jc,kc) = 0.25*(dens(ic,jc,km)+dens(isy,jc,km)
+     %                         +dens(ic,jm,km)+dens(isy,jm,km))
         end do
+      end do
 c variables at the sphere centre
       do kc=2,n3m
-c      km=kmv(kc)
-       km=kc-1
-       kp=kpv(kc)
+c       km=kmv(kc)
+        km=kc-1
+c       kp=kpv(kc)
         jc=1
         jm=jmv(jc)
         jp=jpv(jc)
-         do ic=1,n1m
-         im=imv(ic)
-         ip=ipv(ic)
-         ksy = ksym(kc)
-         ksyy = ksym(km)
-         ksyx = ksyc(kc)
-         ksymc = ksyc(km)
-         isy = isym(ic)
-         isyx=isym(im)
-          xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
-          yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
-          zzz = rc(jc)*cos(zz(kc))
+        do ic=1,n1m
+          im=imv(ic)
+c         ip=ipv(ic)
+          ksy = ksym(kc)
+          ksyy = ksym(km)
+          ksyx = ksyc(kc)
+c         ksymc = ksyc(km)
+          isy = isym(ic)
+          isyx=isym(im)
+c         xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
+c         yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
+c         zzz = rc(jc)*cos(zz(kc))
           vt = 0.25*(q1(ic,jc,kc)-q1(isy,jc,ksy)
      %              +q1(ic,jc,km)-q1(isy,jc,ksyy))
           vr = 0.125*(q2(ic,jp,kc)-q2(isy,jp,ksy)
@@ -1973,67 +1976,67 @@ c      km=kmv(kc)
           vp = 0.25*(q3(ic,jc,kc)+q3(isy,jc,ksyx)
      %              +q3(im,jc,kc)+q3(isyx,jc,ksyx))/sin(zz(kc))
 c Cartesian velocities
-      vx(ic,jc,kc) = vt
-      vy(ic,jc,kc) = vr
-      vz(ic,jc,kc) = vp
-      if(inslwri.eq.0) then
-      vx(ic,1,1) = 0.
-      vy(ic,1,1) = 0.
-      vz(ic,1,1) = 0.
-      end if
-      prc(ic,jc,kc) = 0.25*(pr(ic,jc,kc)+pr(isy,jc,ksy)
-     %                     +pr(ic,jm,kc)+pr(isy,jm,ksy))
-      temp(ic,jc,kc) = 1. !0.25*(dens(ic,jc,kc)+dens(isy,jc,ksy)
-c    %                     +dens(ic,jm,kc)+dens(isy,jm,ksy))
-            end do
+          vx(ic,jc,kc) = vt
+          vy(ic,jc,kc) = vr
+          vz(ic,jc,kc) = vp
+          if(inslwri.eq.0) then
+            vx(ic,1,1) = 0.
+            vy(ic,1,1) = 0.
+            vz(ic,1,1) = 0.
+          end if
+          prc(ic,jc,kc) = 0.25*(pr(ic,jc,kc)+pr(isy,jc,ksy)
+     %                         +pr(ic,jm,kc)+pr(isy,jm,ksy))
+          temp(ic,jc,kc) = 1. !0.25*(dens(ic,jc,kc)+dens(isy,jc,ksy)
+c    %                         +dens(ic,jm,kc)+dens(isy,jm,ksy))
         end do
-         do ic=1,n1m
-      if(inslwri.eq.1) then
-      vx(ic,1,1) = vx(ic,1,2)
-      vy(ic,1,1) = vy(ic,1,2)
-      vz(ic,1,1) = vz(ic,1,2)
-      else
-      vx(ic,1,1) = 0.
-      vy(ic,1,1) = 0.
-      vz(ic,1,1) = 0.
-      end if
-      if(inslwr.eq.1) then
-      vx(ic,n2,1) = vx(ic,n2m,2)
-      vy(ic,n2,1) = vy(ic,n2m,2)
-      vz(ic,n2,1) = vz(ic,n2m,2)
-      else
-      vx(ic,1,1) = 0.
-      vy(ic,1,1) = 0.
-      vz(ic,1,1) = 0.
-      end if
-      prc(ic,1,1) = prc(ic,1,2)
-      temp(ic,1,1) = temp(ic,1,2)
-      vx(ic,1,n3) = vx(ic,1,n3m)
-      vy(ic,1,n3) = vy(ic,1,n3m)
-      vz(ic,1,n3) = vz(ic,1,n3m)
-      prc(ic,1,n3) = prc(ic,1,n3m)
-      temp(ic,1,n3) = temp(ic,1,n3m)
-        end do
-      do kc=1,n3
-       do ic=1,n1
-        pr(n1,jc,kc) = pr(1,jc,kc)
-      if(inslwr.eq.0) then
-        vx(n1,jc,kc) = 0.
-        vy(n1,jc,kc) = 0.
-        vz(n1,jc,kc) = 0.
-      end if
-        temp(ic,n2,kc) = 0.
-       end do
+      end do
+      do ic=1,n1m
+        if(inslwri.eq.1) then
+          vx(ic,1,1) = vx(ic,1,2)
+          vy(ic,1,1) = vy(ic,1,2)
+          vz(ic,1,1) = vz(ic,1,2)
+        else
+          vx(ic,1,1) = 0.
+          vy(ic,1,1) = 0.
+          vz(ic,1,1) = 0.
+        end if
+        if(inslwr.eq.1) then
+          vx(ic,n2,1) = vx(ic,n2m,2)
+          vy(ic,n2,1) = vy(ic,n2m,2)
+          vz(ic,n2,1) = vz(ic,n2m,2)
+        else
+          vx(ic,1,1) = 0.
+          vy(ic,1,1) = 0.
+          vz(ic,1,1) = 0.
+        end if
+        prc(ic,1,1) = prc(ic,1,2)
+        temp(ic,1,1) = temp(ic,1,2)
+        vx(ic,1,n3) = vx(ic,1,n3m)
+        vy(ic,1,n3) = vy(ic,1,n3m)
+        vz(ic,1,n3) = vz(ic,1,n3m)
+        prc(ic,1,n3) = prc(ic,1,n3m)
+        temp(ic,1,n3) = temp(ic,1,n3m)
       end do
       do kc=1,n3
-       do jc=1,n2
-        pr(n1,jc,kc) = pr(1,jc,kc)
-        vx(n1,jc,kc) = vx(1,jc,kc)
-        vy(n1,jc,kc) = vy(1,jc,kc)
-        vz(n1,jc,kc) = vz(1,jc,kc)
-        prc(n1,jc,kc) = prc(1,jc,kc)
-        temp(n1,jc,kc) = temp(1,jc,kc)
-       end do
+        do ic=1,n1
+          pr(n1,jc,kc) = pr(1,jc,kc)
+          if(inslwr.eq.0) then
+            vx(n1,jc,kc) = 0.
+            vy(n1,jc,kc) = 0.
+            vz(n1,jc,kc) = 0.
+          end if
+          temp(ic,n2,kc) = 0.
+        end do
+      end do
+      do kc=1,n3
+        do jc=1,n2
+          pr(n1,jc,kc) = pr(1,jc,kc)
+          vx(n1,jc,kc) = vx(1,jc,kc)
+          vy(n1,jc,kc) = vy(1,jc,kc)
+          vz(n1,jc,kc) = vz(1,jc,kc)
+          prc(n1,jc,kc) = prc(1,jc,kc)
+          temp(n1,jc,kc) = temp(1,jc,kc)
+        end do
       end do
       go to 7755
 c
@@ -2042,69 +2045,78 @@ c
 
 c     
       do j=1,n2
-       vxas = 0.
-       vyas = 0.
-       vzas = 0.
-       do i=1,n1
-        vxas = vxas + vx(i,j,n3m)
-        vyas = vyas + vy(i,j,n3m)
-        vzas = vzas + vz(i,j,n3m)
-       end do
-       do i=1,n1
-        vx(i,j,n3) = vxas/float(n1)
-        vy(i,j,n3) = vyas/float(n1)
-        vz(i,j,n3) = vzas/float(n1)
-       end do
+        vxas = 0.
+        vyas = 0.
+        vzas = 0.
+        do i=1,n1
+          vxas = vxas + vx(i,j,n3m)
+          vyas = vyas + vy(i,j,n3m)
+          vzas = vzas + vz(i,j,n3m)
+        end do
+        vxas = vxas/float(n1)
+        vyas = vyas/float(n1)
+        vzas = vzas/float(n1)
+        do i=1,n1
+          vx(i,j,n3) = vxas
+          vy(i,j,n3) = vyas
+          vz(i,j,n3) = vzas
+        end do
       end do
 c     
       do j=1,n2
-       vxas = 0.
-       vyas = 0.
-       vzas = 0.
-       do i=1,n1
-        vxas = vxas + vx(i,j,2)
-        vyas = vyas + vy(i,j,2)
-        vzas = vzas + vz(i,j,2)
-       end do
-       do i=1,n1
-        vx(i,j,1) = vxas/float(n1)
-        vy(i,j,1) = vyas/float(n1)
-        vz(i,j,1) = vzas/float(n1)
-       end do
+        vxas = 0.
+        vyas = 0.
+        vzas = 0.
+        do i=1,n1
+          vxas = vxas + vx(i,j,2)
+          vyas = vyas + vy(i,j,2)
+          vzas = vzas + vz(i,j,2)
+        end do
+        vxas = vxas/float(n1)
+        vyas = vyas/float(n1)
+        vzas = vzas/float(n1)
+        do i=1,n1
+          vx(i,j,1) = vxas
+          vy(i,j,1) = vyas
+          vz(i,j,1) = vzas
+        end do
       end do
 c     
       vxce = 0.
       vyce = 0.
       vzce = 0.
       do k=1,n3
-       do i=1,n1
-        vxce = vxce + vx(i,1,k)
-        vyce = vyce + vy(i,1,k)
-        vzce = vzce + vz(i,1,k)
-       end do
+        do i=1,n1
+          vxce = vxce + vx(i,1,k)
+          vyce = vyce + vy(i,1,k)
+          vzce = vzce + vz(i,1,k)
+        end do
       end do
+      vxce = vxce/float(n1*n3)
+      vyce = vyce/float(n1*n3)
+      vzce = vzce/float(n1*n3)
       do k=1,n3
-       do i=1,n1
-        vx(i,1,k) = vxce/float(n1*n3)
-        vy(i,1,k) = vyce/float(n1*n3)
-        vz(i,1,k) = vzce/float(n1*n3)
-       end do
+        do i=1,n1
+          vx(i,1,k) = vxce
+          vy(i,1,k) = vyce
+          vz(i,1,k) = vzce
+        end do
       end do
-       if(rc(1).le.1.e-3) then
-       jc=1
-       pmcen = 0.
-       do kc=1,n3m
-        do ic=1,n1m
-         pmcen = pmcen + pr(ic,jc,kc)
+      if(rc(1).le.1.e-3) then
+        jc=1
+        pmcen = 0.
+        do kc=1,n3m
+          do ic=1,n1m
+            pmcen = pmcen + pr(ic,jc,kc)
+          end do
         end do
-       end do
-       pmcen = pmcen/float(n1m*n3m)
-       do kc=1,n3 
-        do ic=1,n1 
-         prc(ic,jc,kc) = pmcen
+        pmcen = pmcen/float(n1m*n3m)
+        do kc=1,n3 
+          do ic=1,n1 
+            prc(ic,jc,kc) = pmcen
+          end do
         end do
-       end do
-       end if
+      end if
  7755 continue
       itime=10.*time !+0.5
       write(ipfi,99) itime
@@ -2115,11 +2127,11 @@ c     namfi3='/scratch/verzicco/barun/dati/bou'//ipfi//'.dat'
       n2pp=(n2-1)/n2p!+1
       n3pp=(n3-1)/n3p!+1
       open(99,file=namfi3,form='unformatted',status='unknown')
-        rewind(99)
-        write(99) 1
-        write(99) n1,n2,n3
-        write(99) epsil,epsil,re,time
-        write(99)
+      rewind(99)
+      write(99) 1
+      write(99) n1,n2,n3
+      write(99) epsil,epsil,re,time
+      write(99)
 c    %   ((((1.),
      %   ((((sqrt(vx(i,j,k)**2+vy(i,j,k)**2+vz(i,j,k)**2)),
      %   i=1,n1),j=1,n2),k=1,n3),
@@ -2139,70 +2151,70 @@ c    %   ((((1.),
 
 c     Cartesian components
       do kc=2,n3m
-c      km=kmv(kc)
-       km=kc-1
-       kp=kpv(kc)
+c       km=kmv(kc)
+        km=kc-1
+c       kp=kpv(kc)
         do jc=2,n2
-c       jm=jmv(jc)
-        jm=jc-1
-        jp=jpv(jc)
-         do ic=1,n1m
-         im=imv(ic)
-         ip=ipv(ic)
-         ksy = ksym(kc)
-         isy = isym(ic)
+c         jm=jmv(jc)
+          jm=jc-1
+c         jp=jpv(jc)
+          do ic=1,n1m
+            im=imv(ic)
+c           ip=ipv(ic)
+c           ksy = ksym(kc)
+c           isy = isym(ic)
 c Cartesian coordinates
-          xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
-          yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
-          zzz = rc(jc)*cos(zz(kc))
+c           xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
+c           yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
+c           zzz = rc(jc)*cos(zz(kc))
 c velocities at the cell nodes
-          vt = 0.25*(q1(ic,jc,kc)+q1(ic,jm,kc)
-     %              +q1(ic,jc,km)+q1(ic,jm,km))
-          vr = 0.25*(q2(ic,jc,kc)+q2(im,jc,kc)
-     %               +q2(ic,jc,km)+q2(im,jc,km))/rc(jc)**2
-          vp = 0.25*(q3(ic,jc,kc)+q3(im,jc,kc)
-     %              +q3(ic,jm,kc)+q3(im,jm,kc))/sin(zz(kc))
-          ct = cos(thetac(ic))
-          st = sin(thetac(ic))
-          cp = cos(zz(kc))
-          sp = sin(zz(kc))
-c     vx(ic,jc,kc) = vr*ct*sp-vt*st*sp+vp*ct*cp
-c     vy(ic,jc,kc) = vr*st*sp+vt*ct*sp+vp*st*cp
-c     vz(ic,jc,kc) = vr*cp-vp*sp
-      vx(ic,jc,kc) = vr*ct*sp-vt*st+vp*ct*cp
-      vy(ic,jc,kc) = vr*st*sp+vt*ct+vp*st*cp
-      vz(ic,jc,kc) = vr*cp-vp*sp
-      prc(ic,jc,kc)= 0.125*(pr(ic,jc,kc)+pr(ic,jm,kc)
-     %                     +pr(ic,jc,km)+pr(ic,jm,km) 
-     %                     +pr(im,jc,kc)+pr(im,jm,kc)
-     %                     +pr(im,jc,km)+pr(im,jm,km) )
-      temp(ic,jc,kc)= 0.125*(dens(ic,jc,kc)+dens(ic,jm,kc)
-     %                     +dens(ic,jc,km)+dens(ic,jm,km) 
-     %                     +dens(im,jc,kc)+dens(im,jm,kc)
-     %                     +dens(im,jc,km)+dens(im,jm,km) )
-            end do
+            vt = 0.25*(q1(ic,jc,kc)+q1(ic,jm,kc)
+     %                +q1(ic,jc,km)+q1(ic,jm,km))
+            vr = 0.25*(q2(ic,jc,kc)+q2(im,jc,kc)
+     %                 +q2(ic,jc,km)+q2(im,jc,km))/rc(jc)**2
+            vp = 0.25*(q3(ic,jc,kc)+q3(im,jc,kc)
+     %                +q3(ic,jm,kc)+q3(im,jm,kc))/sin(zz(kc))
+            ct = cos(thetac(ic))
+            st = sin(thetac(ic))
+            cp = cos(zz(kc))
+            sp = sin(zz(kc))
+c           vx(ic,jc,kc) = vr*ct*sp-vt*st*sp+vp*ct*cp
+c           vy(ic,jc,kc) = vr*st*sp+vt*ct*sp+vp*st*cp
+c           vz(ic,jc,kc) = vr*cp-vp*sp
+            vx(ic,jc,kc) = vr*ct*sp-vt*st+vp*ct*cp
+            vy(ic,jc,kc) = vr*st*sp+vt*ct+vp*st*cp
+            vz(ic,jc,kc) = vr*cp-vp*sp
+            prc(ic,jc,kc)= 0.125*(pr(ic,jc,kc)+pr(ic,jm,kc)
+     %                           +pr(ic,jc,km)+pr(ic,jm,km) 
+     %                           +pr(im,jc,kc)+pr(im,jm,kc)
+     %                           +pr(im,jc,km)+pr(im,jm,km) )
+            temp(ic,jc,kc)= 0.125*(dens(ic,jc,kc)+dens(ic,jm,kc)
+     %                           +dens(ic,jc,km)+dens(ic,jm,km) 
+     %                           +dens(im,jc,kc)+dens(im,jm,kc)
+     %                           +dens(im,jc,km)+dens(im,jm,km) )
           end do
         end do
+      end do
 c variables at the sphere centre
       do kc=2,n3m
-c      km=kmv(kc)
-       km=kc-1
-       kp=kpv(kc)
+c       km=kmv(kc)
+        km=kc-1
+c       kp=kpv(kc)
         jc=1
         jm=jmv(jc)
         jp=jpv(jc)
-         do ic=1,n1m
-         im=imv(ic)
-         ip=ipv(ic)
-         ksy = ksym(kc)
-         ksyy = ksym(km)
-         ksyx = ksyc(kc)
-         ksymc = ksyc(km)
-         isy = isym(ic)
-         isyx=isym(im)
-          xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
-          yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
-          zzz = rc(jc)*cos(zz(kc))
+        do ic=1,n1m
+          im=imv(ic)
+c         ip=ipv(ic)
+          ksy = ksym(kc)
+          ksyy = ksym(km)
+          ksyx = ksyc(kc)
+c         ksymc = ksyc(km)
+          isy = isym(ic)
+          isyx=isym(im)
+c         xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
+c         yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
+c         zzz = rc(jc)*cos(zz(kc))
           vt = 0.25*(q1(ic,jc,kc)-q1(isy,jc,ksy)
      %              +q1(ic,jc,km)-q1(isy,jc,ksyy))
           vr = 0.125*(q2(ic,jp,kc)-q2(isy,jp,ksy)
@@ -2216,80 +2228,80 @@ c      km=kmv(kc)
           cp = cos(zz(kc))
           sp = sin(zz(kc))
 c Cartesian velocities
-c     vx(ic,jc,kc) = vr*ct*sp-vt*st*sp+vp*ct*cp
-c     vy(ic,jc,kc) = vr*st*sp+vt*ct*sp+vp*st*cp
-c     vz(ic,jc,kc) = vr*cp-vp*sp
-      vx(ic,jc,kc) = vr*ct*sp-vt*st+vp*ct*cp
-      vy(ic,jc,kc) = vr*st*sp+vt*ct+vp*st*cp
-      vz(ic,jc,kc) = vr*cp-vp*sp
-      prc(ic,jc,kc) = 0.25*(pr(ic,jc,kc)+pr(isy,jc,ksy)
-     %                     +pr(ic,jm,kc)+pr(isy,jm,ksy))
-      temp(ic,jc,kc) = 0.25*(dens(ic,jc,kc)+dens(isy,jc,ksy)
-     %                     +dens(ic,jm,kc)+dens(isy,jm,ksy))
-            end do
+c         vx(ic,jc,kc) = vr*ct*sp-vt*st*sp+vp*ct*cp
+c         vy(ic,jc,kc) = vr*st*sp+vt*ct*sp+vp*st*cp
+c         vz(ic,jc,kc) = vr*cp-vp*sp
+          vx(ic,jc,kc) = vr*ct*sp-vt*st+vp*ct*cp
+          vy(ic,jc,kc) = vr*st*sp+vt*ct+vp*st*cp
+          vz(ic,jc,kc) = vr*cp-vp*sp
+          prc(ic,jc,kc) = 0.25*(pr(ic,jc,kc)+pr(isy,jc,ksy)
+     %                         +pr(ic,jm,kc)+pr(isy,jm,ksy))
+          temp(ic,jc,kc) = 0.25*(dens(ic,jc,kc)+dens(isy,jc,ksy)
+     %                         +dens(ic,jm,kc)+dens(isy,jm,ksy))
         end do
+      end do
 c North pole
-       kc=1
-       kp=kpv(kc)
-        do jc=2,n2
+      kc=1
+      kp=kpv(kc)
+      do jc=2,n2
 c       jm=jmv(jc)
         jm=jc-1
-        jp=jpv(jc)
-         do ic=1,n1m
-         im=imv(ic)
-         ip=ipv(ic)
-         ksy = ksym(kc)
-         ksc = ksyc(kc)
-         isy = isym(ic)
-         isyx = isym(im)
+c       jp=jpv(jc)
+        do ic=1,n1m
+          im=imv(ic)
+c         ip=ipv(ic)
+c         ksy = ksym(kc)
+c         ksc = ksyc(kc)
+          isy = isym(ic)
+          isyx = isym(im)
 c Cartesian coordinates
-          xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
-          yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
-          zzz = rc(jc)*cos(zz(kc))
+c         xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
+c         yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
+c         zzz = rc(jc)*cos(zz(kc))
 c velocities at the cell nodes
           vt = 0.25*(q1(ic,jc,kc)-q1(isy,jc,kc)
      %              + q1(ic,jm,kc)-q1(isy,jm,kc))
           vr = 0.25*(q2(ic,jc,kc)+q2(isy,jc,kc)
      %          +q2(im,jc,kc)+q2(isyx,jc,kc) )/rc(jc)**2
           vp = 0.125*(q3(ic,jc,kp)-q3(isy,jc,kp)
-     %     +q3(im,jc,kp)-q3(isyx,jc,kp)
-     %     +q3(ic,jm,kp)-q3(isy,jm,kp)
-     %     +q3(im,jm,kp)-q3(isyx,jm,kp)  )/sin(zz(kp))
+     %       +q3(im,jc,kp)-q3(isyx,jc,kp)
+     %       +q3(ic,jm,kp)-q3(isy,jm,kp)
+     %       +q3(im,jm,kp)-q3(isyx,jm,kp) )/sin(zz(kp))
           ct = cos(thetac(ic))
           st = sin(thetac(ic))
           cp = cos(zz(kc))
           sp = sin(zz(kc))
-c     vx(ic,jc,kc) = vr*ct*sp-vt*st*sp+vp*ct*cp
-c     vy(ic,jc,kc) = vr*st*sp+vt*ct*sp+vp*st*cp
-c     vz(ic,jc,kc) = vr*cp-vp*sp
-      vx(ic,jc,kc) = vr*ct*sp-vt*st+vp*ct*cp
-      vy(ic,jc,kc) = vr*st*sp+vt*ct+vp*st*cp
-      vz(ic,jc,kc) = vr*cp-vp*sp
-      prc(ic,jc,kc) = 0.25*(pr(ic,jc,kc)+pr(isy,jc,kc)
-     %                     +pr(ic,jm,kc)+pr(isy,jm,kc))
-      temp(ic,jc,kc) = 0.25*(dens(ic,jc,kc)+dens(isy,jc,kc)
-     %                     +dens(ic,jm,kc)+dens(isy,jm,kc))
-            end do
+c         vx(ic,jc,kc) = vr*ct*sp-vt*st*sp+vp*ct*cp
+c         vy(ic,jc,kc) = vr*st*sp+vt*ct*sp+vp*st*cp
+c         vz(ic,jc,kc) = vr*cp-vp*sp
+          vx(ic,jc,kc) = vr*ct*sp-vt*st+vp*ct*cp
+          vy(ic,jc,kc) = vr*st*sp+vt*ct+vp*st*cp
+          vz(ic,jc,kc) = vr*cp-vp*sp
+          prc(ic,jc,kc) = 0.25*(pr(ic,jc,kc)+pr(isy,jc,kc)
+     %                         +pr(ic,jm,kc)+pr(isy,jm,kc))
+          temp(ic,jc,kc) = 0.25*(dens(ic,jc,kc)+dens(isy,jc,kc)
+     %                         +dens(ic,jm,kc)+dens(isy,jm,kc))
         end do
+      end do
 c South pole
-       kc=n3
-       km=n3m
-        do jc=2,n2
+      kc=n3
+      km=n3m
+      do jc=2,n2
 c       jm=jmv(jc)
 c       if(jc.eq.2) jm=2  !because for j=1 we haven't defined the variables jet
         jm = jc-1
-        jp=jpv(jc)
-         do ic=1,n1m
-         im=imv(ic)
-         ip=ipv(ic)
-         ksy = ksym(kc)
-         ksc = ksyc(kc)
-         isy = isym(ic)
-         isyx = isym(im)
+c       jp=jpv(jc)
+        do ic=1,n1m
+          im=imv(ic)
+c         ip=ipv(ic)
+c         ksy = ksym(kc)
+c         ksc = ksyc(kc)
+          isy = isym(ic)
+          isyx = isym(im)
 c Cartesian coordinates
-          xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
-          yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
-          zzz = rc(jc)*cos(zz(kc))
+c         xxx = rc(jc)*cos(thetac(ic))*sin(zz(kc))
+c         yyy = rc(jc)*sin(thetac(ic))*sin(zz(kc))
+c         zzz = rc(jc)*cos(zz(kc))
 c velocities at the cell nodes
           vt = 0.25*(q1(ic,jc,kc)-q1(isy,jc,kc)
      %              + q1(ic,jm,kc)-q1(isy,jm,kc))
@@ -2305,37 +2317,37 @@ c velocities at the cell nodes
           st = sin(thetac(ic))
           cp = cos(zz(kc))
           sp = sin(zz(kc))
-c     vx(ic,jc,kc) = vr*ct*sp-vt*st*sp+vp*ct*cp
-c     vy(ic,jc,kc) = vr*st*sp+vt*ct*sp+vp*st*cp
-c     vz(ic,jc,kc) = vr*cp-vp*sp
-      vx(ic,jc,kc) = vr*ct*sp-vt*st+vp*ct*cp
-      vy(ic,jc,kc) = vr*st*sp+vt*ct+vp*st*cp
-      vz(ic,jc,kc) = vr*cp-vp*sp
-      prc(ic,jc,kc) = 0.25*(pr(ic,jc,km)+pr(isy,jc,km)
-     %                     +pr(ic,jm,km)+pr(isy,jm,km))
-      temp(ic,jc,kc) = 0.25*(dens(ic,jc,km)+dens(isy,jc,km)
-     %                     +dens(ic,jm,km)+dens(isy,jm,km))
-            end do
+c         vx(ic,jc,kc) = vr*ct*sp-vt*st*sp+vp*ct*cp
+c         vy(ic,jc,kc) = vr*st*sp+vt*ct*sp+vp*st*cp
+c         vz(ic,jc,kc) = vr*cp-vp*sp
+          vx(ic,jc,kc) = vr*ct*sp-vt*st+vp*ct*cp
+          vy(ic,jc,kc) = vr*st*sp+vt*ct+vp*st*cp
+          vz(ic,jc,kc) = vr*cp-vp*sp
+          prc(ic,jc,kc) = 0.25*(pr(ic,jc,km)+pr(isy,jc,km)
+     %                         +pr(ic,jm,km)+pr(isy,jm,km))
+          temp(ic,jc,kc) = 0.25*(dens(ic,jc,km)+dens(isy,jc,km)
+     %                         +dens(ic,jm,km)+dens(isy,jm,km))
         end do
-         do ic=1,n1
-      vx(ic,1,1) = vx(ic,1,2)
-      vy(ic,1,1) = vy(ic,1,2)
-      vz(ic,1,1) = vz(ic,1,2)
-      vx(ic,1,n3) = vx(ic,1,n3m)
-      vy(ic,1,n3) = vy(ic,1,n3m)
-      vz(ic,1,n3) = vz(ic,1,n3m)
-      prc(ic,1,n3) = prc(ic,1,n3m)
-      temp(ic,1,n3) = temp(ic,1,n3m)
-        end do
+      end do
+      do ic=1,n1
+        vx(ic,1,1) = vx(ic,1,2)
+        vy(ic,1,1) = vy(ic,1,2)
+        vz(ic,1,1) = vz(ic,1,2)
+        vx(ic,1,n3) = vx(ic,1,n3m)
+        vy(ic,1,n3) = vy(ic,1,n3m)
+        vz(ic,1,n3) = vz(ic,1,n3m)
+        prc(ic,1,n3) = prc(ic,1,n3m)
+        temp(ic,1,n3) = temp(ic,1,n3m)
+      end do
       do kc=1,n3
-       do jc=1,n2
-        prc(n1,jc,kc) = prc(1,jc,kc)
-        vx(n1,jc,kc) = vx(1,jc,kc)
-        vy(n1,jc,kc) = vy(1,jc,kc)
-        vz(n1,jc,kc) = vz(1,jc,kc)
-        pr(n1,jc,kc) = pr(1,jc,kc)
-        temp(n1,jc,kc) = temp(1,jc,kc)
-       end do
+        do jc=1,n2
+          prc(n1,jc,kc) = prc(1,jc,kc)
+          vx(n1,jc,kc) = vx(1,jc,kc)
+          vy(n1,jc,kc) = vy(1,jc,kc)
+          vz(n1,jc,kc) = vz(1,jc,kc)
+          pr(n1,jc,kc) = pr(1,jc,kc)
+          temp(n1,jc,kc) = temp(1,jc,kc)
+        end do
       end do
 c
 c   Omogeneizzazione all'asse
@@ -2343,88 +2355,97 @@ c
 
 c     
       do j=1,n2
-       vxas = 0.
-       vyas = 0.
-       vzas = 0.
-       do i=1,n1
-        vxas = vxas + vx(i,j,n3m)
-        vyas = vyas + vy(i,j,n3m)
-        vzas = vzas + vz(i,j,n3m)
-       end do
-       do i=1,n1
-        vx(i,j,n3) = vxas/float(n1)
-        vy(i,j,n3) = vyas/float(n1)
-        vz(i,j,n3) = vzas/float(n1)
-       end do
+        vxas = 0.
+        vyas = 0.
+        vzas = 0.
+        do i=1,n1
+          vxas = vxas + vx(i,j,n3m)
+          vyas = vyas + vy(i,j,n3m)
+          vzas = vzas + vz(i,j,n3m)
+        end do
+        vxas = vxas/float(n1)
+        vyas = vyas/float(n1)
+        vzas = vzas/float(n1)
+        do i=1,n1
+          vx(i,j,n3) = vxas
+          vy(i,j,n3) = vyas
+          vz(i,j,n3) = vzas
+        end do
       end do
       
       do j=1,n2
-       vxas = 0.
-       vyas = 0.
-       vzas = 0.
-       do i=1,n1
-        vxas = vxas + vx(i,j,2)
-        vyas = vyas + vy(i,j,2)
-        vzas = vzas + vz(i,j,2)
-       end do
-       do i=1,n1
-        vx(i,j,1) = vxas/float(n1)
-        vy(i,j,1) = vyas/float(n1)
-        vz(i,j,1) = vzas/float(n1)
-       end do
+        vxas = 0.
+        vyas = 0.
+        vzas = 0.
+        do i=1,n1
+          vxas = vxas + vx(i,j,2)
+          vyas = vyas + vy(i,j,2)
+          vzas = vzas + vz(i,j,2)
+        end do
+        vxas = vxas/float(n1)
+        vyas = vyas/float(n1)
+        vzas = vzas/float(n1)
+        do i=1,n1
+          vx(i,j,1) = vxas
+          vy(i,j,1) = vyas
+          vz(i,j,1) = vzas
+        end do
       end do
 c     
       vxce = 0.
       vyce = 0.
       vzce = 0.
       do k=1,n3
-       do i=1,n1
-        vxce = vxce + vx(i,1,k)
-        vyce = vyce + vy(i,1,k)
-        vzce = vzce + vz(i,1,k)
-       end do
+        do i=1,n1
+          vxce = vxce + vx(i,1,k)
+          vyce = vyce + vy(i,1,k)
+          vzce = vzce + vz(i,1,k)
+        end do
       end do
+      vxce = vxce/float(n1*n3)
+      vyce = vyce/float(n1*n3)
+      vzce = vzce/float(n1*n3)
       do k=1,n3
-       do i=1,n1
-        vx(i,1,k) = vxce/float(n1*n3)
-        vy(i,1,k) = vyce/float(n1*n3)
-        vz(i,1,k) = vzce/float(n1*n3)
-       end do
+        do i=1,n1
+          vx(i,1,k) = vxce
+          vy(i,1,k) = vyce
+          vz(i,1,k) = vzce
+        end do
       end do
-       if(rc(1).le.1.e-3) then
-       jc=1
-       pmcen = 0.
-       do kc=1,n3m
-        do ic=1,n1m
-         pmcen = pmcen + pr(ic,jc,kc)
+      if(rc(1).le.1.e-3) then
+        jc=1
+        pmcen = 0.
+        do kc=1,n3m
+          do ic=1,n1m
+            pmcen = pmcen + pr(ic,jc,kc)
+          end do
         end do
-       end do
-       pmcen = pmcen/float(n1m*n3m)
-       do kc=1,n3 
-        do ic=1,n1 
-         prc(ic,jc,kc) = pmcen
+        pmcen = pmcen/float(n1m*n3m)
+        do kc=1,n3 
+          do ic=1,n1 
+            prc(ic,jc,kc) = pmcen
+          end do
         end do
-       end do
-       end if
+      end if
 cccccccccccccccccccccc
 c     do k=1,n3m
-c      do j=1,n2m
-c       do i=1,n1m
-c        ip = ipv(i)
-c        ct= cos(thetam(i))
-c        st= sin(thetam(i))
-c        cp= cos(zm(k))
-c        sp= sin(zm(k))
-c        vx(i,j,k) = 0.5*(q2(i,j,k)+q2(i,j+1,k))*ct*sp/rm(j)**2-
-c    %               0.5*(q1(i,j,k)+q1(ip,j,k))*st*sp*rm(j)+
-c    %               0.5*(q3(i,j,k)+q3(i,j,k+1))*ct*cp*rm(j)/sp
-c        vy(i,j,k) = 0.5*(q2(i,j,k)+q2(i,j+1,k))*st*sp/rm(j)**2+
-c    %               0.5*(q1(i,j,k)+q1(ip,j,k))*ct*sp*rm(j)+
-c    %               0.5*(q3(i,j,k)+q3(i,j,k+1))*st*cp*rm(j)/sp
-c        vz(i,j,k) = 0.5*(q2(i,j,k)+q2(i,j+1,k))*cp/rm(j)**2-
-c    %               0.5*(q3(i,j,k)+q3(i,j,k+1))*sp*rm(j)/sp
+c       do j=1,n2m
+c         do i=1,n1m
+c           ip = ipv(i)
+c           ct= cos(thetam(i))
+c           st= sin(thetam(i))
+c           cp= cos(zm(k))
+c           sp= sin(zm(k))
+c           vx(i,j,k) = 0.5*(q2(i,j,k)+q2(i,j+1,k))*ct*sp/rm(j)**2-
+c    %                  0.5*(q1(i,j,k)+q1(ip,j,k))*st*sp*rm(j)+
+c    %                  0.5*(q3(i,j,k)+q3(i,j,k+1))*ct*cp*rm(j)/sp
+c           vy(i,j,k) = 0.5*(q2(i,j,k)+q2(i,j+1,k))*st*sp/rm(j)**2+
+c    %                  0.5*(q1(i,j,k)+q1(ip,j,k))*ct*sp*rm(j)+
+c    %                  0.5*(q3(i,j,k)+q3(i,j,k+1))*st*cp*rm(j)/sp
+c           vz(i,j,k) = 0.5*(q2(i,j,k)+q2(i,j+1,k))*cp/rm(j)**2-
+c    %                  0.5*(q3(i,j,k)+q3(i,j,k+1))*sp*rm(j)/sp
+c         end do
 c       end do
-c      end do
 c     end do
       itime=10.*time !+0.5
       write(ipfi,99) itime
@@ -2437,11 +2458,11 @@ c     namfi3='/scratch/verzicco/barun/dati/bou'//ipfi//'.dat'
       n2pp=(n2-1)/n2p!+1
       n3pp=(n3-1)/n3p!+1
       open(99,file=namfi3,form='unformatted',status='unknown')
-        rewind(99)
-        write(99) 1
-        write(99) n1,n2,n3
-        write(99) epsil,epsil,re,time
-        write(99)
+      rewind(99)
+      write(99) 1
+      write(99) n1,n2,n3
+      write(99) epsil,epsil,re,time
+      write(99)
 c    %   ((((sqrt(vx(i,j,k)**2+vy(i,j,k)**2+vz(i,j,k)**2)),
      %   ((((1.),
      %   i=1,n1),j=1,n2),k=1,n3),
@@ -3287,7 +3308,7 @@ C           north pole
          jp=jpv(j)
          do i=1,n1m
           ip = ipv(i)
-            isy = isym(ic)
+            isy = isym(i)
       q3s = 0.5*(q3(i,j,kp) - q3(isy,j,kp))
 
           eene = eene + 0.5*(
@@ -3308,7 +3329,7 @@ C           south pole
          do i=1,n1m
           ip = ipv(i)
 
-            isy = isym(ic)
+            isy = isym(i)
         q3s = 0.5*(q3(i,j,k) - q3(isy,j,k))
           eene = eene + 0.5*(
      %         ((q1(i,j,k)+q1(ip,j,k))*0.5)**2+
@@ -3345,7 +3366,7 @@ c
       denmin=10.*10.
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,rm,g2rm,g3rm)
-!$OMP$ SHARED(dens)
+!$OMP$ SHARED(dens,sinpm,dx1,dx2,dx3)
 !$OMP$ PRIVATE(fac2,ic,jc,kc)
 !$OMP$ REDUCTION(max:denmax)
 !$OMP$ REDUCTION(min:denmin)

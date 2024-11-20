@@ -1,9 +1,9 @@
-N1	N2	N3	NSST(>1=RK,else AB)	NWRIT	NREAD
-129	33	129	3					1		0
-N1P	N2P	N3P(passo plottaggio)
-1	1	1
-NTST			TPRINT	TPIN	TMAX	IRESET
-20000000	20.0		0.1		400.	0
+N1  N2  N3  NSST(>1=RK,else AB) NWRIT   NREAD
+65  17  65  3                   1       0
+N1P N2P N3P(passo plottaggio)
+1   1   1
+NTST        TPRINT  TPIN    TMAX    IRESET
+10000       1.0     0.1     1.      0
 ALX3D           ISTR3 STR3  RMED31  ETDP3 STRB3
 3.141592653589  -1    1.00  3.40    .60   2.00
 STRR  REXT  RINT  ISTR  RMED  ETDP  STRB
@@ -24,5 +24,7 @@ NINI  NFIN  NSTRI
 1     15    1
 NSON (numero di sonde (max. 400))
 4
+ICOND (3 null, 4 homog. vel.)
+3
 IFORC (0 no-forcing, 1 random forc.)
 1

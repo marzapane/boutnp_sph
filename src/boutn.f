@@ -48,7 +48,7 @@ c     Other details of the scheme are given in the introduction of the
 c     subroutine TSCHEM
 c
 c     timings
-      real timef
+c     real timef
       real init_time(2)         ! initialization time
       real iter_time(2)         ! iteration time
       character*25 namfi
@@ -160,19 +160,19 @@ c
         cflm=0.
 **** SCRIVO CONDIZIONI INIZIALI***
 
-      indexForInitial = 3
-
-
+c     indexForInitial = 4
 c index = 1 -> ball
 c index = 2 -> Hill vortex
-
+c index = 3 -> null (with random pert.)
+c index = 4 -> homogeneous velocity
         if ( indexForInitial .eq. 1 ) then
           call inqpr
         elseif ( indexForInitial .eq. 2 ) then
           call inqHill
-        end if
-        if ( indexForInitial .eq. 3 ) then
-          call inqRB   
+        elseif ( indexForInitial .eq. 3 ) then
+          call inqRB
+        elseif ( indexForInitial .eq. 4 ) then
+          call inqHR
         end if
           write(6,*) ' AAA3 '
         call divgck(dmax,dtot)
@@ -181,17 +181,17 @@ c index = 2 -> Hill vortex
         write(32,*)' initial divg dmax,dtot  ',dmax,dtot
         call outpf(time)
       else
-       write(6,*)' nread=1 ---> cond. iniz. lette da file'
-       write(32,*)' nread=1 ---> cond. iniz. lette da file'
-       call inirea(ntii,time)
-cc     call divgck(dmax,dtot)
-       write(6,*)' initial divg dmax,dtot  ',dmax,dtot
-       write(32,*)' initial divg dmax,dtot  ',dmax,dtot
-c      call cfl(cflm)
-c      call vmaxv
-c      call outh(time,dt)
-c      if(iaxsy.ne.0) call enerc(time)
-c      if(nson.ne.0) call wson(time)
+        write(6,*)' nread=1 ---> cond. iniz. lette da file'
+        write(32,*)' nread=1 ---> cond. iniz. lette da file'
+        call inirea(ntii,time)
+cc      call divgck(dmax,dtot)
+        write(6,*)' initial divg dmax,dtot  ',dmax,dtot
+        write(32,*)' initial divg dmax,dtot  ',dmax,dtot
+c       call cfl(cflm)
+c       call vmaxv
+c       call outh(time,dt)
+c       if(iaxsy.ne.0) call enerc(time)
+c       if(nson.ne.0) call wson(time)
       endif
 c
       ntstf=ntii+ntst
@@ -476,7 +476,7 @@ c  ***********  compute the q1 velocity component
 c               v1dgf=component 1 of grad(dph)
 c
 !$OMP  PARALLEL DO
-!$OMP$ SHARED(n3m,n2m,n1m,imv,udx2c)
+!$OMP$ SHARED(n3m,n2m,n1m,imv)
 !$OMP$ SHARED(q1,dph,usrm,al,dt,dx1,usinpm)
 !$OMP$ PRIVATE(im,usurm,ic,jc,kc)
       do 1 kc=1,n3m
@@ -563,10 +563,10 @@ c
         do 1 jc=1,n2m
           jm=jmv(jc)
           jp=jpv(jc)
-          do 1 ic=1,n1m
-            ip=ipv(ic)
-            im=imv(ic)
-            pr(ic,jc,kc)=pr(ic,jc,kc)+dph(ic,jc,kc)
+            do 1 ic=1,n1m
+              ip=ipv(ic)
+              im=imv(ic)
+              pr(ic,jc,kc)=pr(ic,jc,kc)+dph(ic,jc,kc)
      %                  -be*(
      %                       (dph(ip,jc,kc)-2.*dph(ic,jc,kc)
      %                       +dph(im,jc,kc))*dx1q*usinpm(kc)**2
@@ -682,16 +682,16 @@ c
 
       icon = 0
 !$OMP  PARALLEL DO
-!$OMP$ SHARED(n3,n2,n1m,q1,q2,q3,rc,thetac,zz,x0,y0,z0)
+!$OMP$ SHARED(n3,n2,n1m,q1,q2,q3,rc,thetac,thetam,zz,zm,x0,y0,z0)
 !$OMP$ PRIVATE(i,j,k,xt,yt,zt,rho,vx1,vx2,vx3)
       do 810 k=1,n3
-         do 810 j=1,n2
-            do 810 i=1,n1m
-               xt = rc(j)*cos(thetac(i))*sin(zz(k))
-               yt = rc(j)*sin(thetac(i))*sin(zz(k))
-               zt = rc(j)*cos(zz(k))
-               rho = sqrt((xt-x0)**2+(yt-y0)**2+(zt-z0)**2)
-              if(rho.le.0.25) then
+        do 810 j=1,n2
+          do 810 i=1,n1m
+            xt = rc(j)*cos(thetac(i))*sin(zz(k))
+            yt = rc(j)*sin(thetac(i))*sin(zz(k))
+            zt = rc(j)*cos(zz(k))
+            rho = sqrt((xt-x0)**2+(yt-y0)**2+(zt-z0)**2)
+            if(rho.le.0.25) then
               vx1 =  -1.0!sqrt(2.)/2.! 0.0!*(1.-rm(j))*sin(zm(k))
               vx2 =  0.0!*(1.-rc(j))*sin(zm(k))
               vx3 =  0.0 !sqrt(2.)/2.! 1.0!*(1.-rm(j))*sin(zz(k))
@@ -700,8 +700,22 @@ c
      %                   *sin(zm(k))+vx3*cos(zm(k)))*rc(j)**2
               q3(i,j,k)=((vx1*cos(thetam(i))+vx2*sin(thetam(i)))
      %                   *cos(zz(k))-vx3*sin(zz(k)))*sin(zz(k))
-              end if
- 1888 format(i5,3(1x,i3),8(1x,e12.5))
+            end if
+c     if(rm(j).le.0.35) then
+c     icon = icon+1
+c     write(889,1888) icon,i,j,k,thetac(i),rm(j),zm(k),
+c    %                q1(i,j,k),q2(i,j,k),q3(i,j,k)
+c     end if
+c1888 format(i5,3(1x,i3),8(1x,e12.5))
+C             q3(i,j,k)=1.0*(
+C    %       sin(2.*thetam(i))+sin(3.*thetam(i)))*sin(zz(k))*
+C    %        1.414*(rm(j)*(1.-rm(j)/rc(n2))/rc(n2))**0.25
+C             q2(i,j,k)=0.
+C             q1(i,j,k)=1.0*sin(5.*zm(k))*
+C    %        (sin(1.*thetac(i))+sin(4.*thetac(i)))*
+C    %        1.414*(rm(j)*(1.-rm(j)/rc(n2))/rc(n2))**0.25
+c    %        *rm(j)*(1.-rm(j)/rc(n2))/rc(n2)
+c             q1(i,j,k)=0.1*cos(5.*thetac(i))*sin(2.*zm(k))
   810 continue
 !$OMP  END PARALLEL DO
 c      close(889)
@@ -757,14 +771,14 @@ c
 c
 c***********************************************************************
 c                                                                      *
-c                       CONDIZIONI INIZIALI                            *
+c                CONDIZIONI INIZIALI: Rayleigh–Bénard                  *
 c                                                                      *
 c***********************************************************************
       subroutine inqRB
       include'param.f'
       pi=2.*asin(1.)
 !$OMP  PARALLEL DO
-!$OMP$ SHARED(n3,n2,n1,q1,q2,q3)
+!$OMP$ SHARED(n3,n2,n1,q1,q2,q3,dens)
 !$OMP$ PRIVATE(i,j,k)
       do 80 k=1,n3
          do 80 j=1,n2
@@ -775,6 +789,36 @@ c***********************************************************************
               dens(i,j,k)=0.5 + 0.05*rand()
   80  continue
 !$OMP  END PARALLEL DO
+c
+      return
+      end
+c
+c
+c***********************************************************************
+c                                                                      *
+c            CONDIZIONI INIZIALI: Homogeneous Rotation                 *
+c                                                                      *
+c***********************************************************************
+      subroutine inqHR
+      include'param.f'
+      pi=2.*asin(1.)
+!$OMP  PARALLEL DO
+!$OMP$ SHARED(n3,n2,n1,q1,q2,q3,dens)
+!$OMP$ PRIVATE(i,j,k)
+      do 85 k=1,n3
+        do 85 j=1,n2
+          do 85 i=1,n1
+            q1(i,j,k)=0.01
+            q2(i,j,k)=0.
+            q3(i,j,k)=0.
+            dens(i,j,k)=0.5
+  85  continue
+!$OMP  END PARALLEL DO
+      do 86 k=1,n3
+        do 86 j=1,n2
+          q1(1,j,k)=0.
+          q1(n1,j,k)=0.
+  86  continue  
 c
       return
       end
@@ -1092,21 +1136,21 @@ C     timhd0 = etime_(t)
 !$OMP$ SHARED(dx1,dx1q,dx2,usinpm,fvisc1e,fvisc2e,fvisc3e)
 !$OMP$ PRIVATE(km,kp,jp,jm,ip,im,d11q1,d22q1,d33q1,dcq1,dpx11,iadd)
 !$OMP$ PRIVATE(h11,udx1,udx1nl,udx1q,app,acc,amm,ic,jc,kc)
-      do 25 kc=1,n3m
-        km=kmv(kc)
-        kp=kpv(kc)
-        do 25 jc=2,n2m-1
-          udx1=dx1*usrm(jc)*usinpm(kc)*al
-          udx1nl = dx1*usrm(jc)*0.25*al
-          udx1q = dx1q*(usrm(jc)*usinpm(kc))**2
-          app=ap1j(jc)
-          acc=ac1j(jc)
-          amm=am1j(jc)
-          jp=jpv(jc)
-          jm=jmv(jc)
-          do 25 ic=1,n1m
-            ip=ipv(ic)
-            im=imv(ic)
+        do 25 kc=1,n3m
+          km=kmv(kc)
+          kp=kpv(kc)
+          do 25 jc=2,n2m-1
+             udx1=dx1*usrm(jc)*usinpm(kc)*al
+             udx1nl = dx1*usrm(jc)*0.25*al
+             udx1q = dx1q*(usrm(jc)*usinpm(kc))**2
+             app=ap1j(jc)
+             acc=ac1j(jc)
+             amm=am1j(jc)
+             jp=jpv(jc)
+             jm=jmv(jc)
+             do 25 ic=1,n1m
+                ip=ipv(ic)
+                im=imv(ic)
 c
 c   11 second deriv. of dens(n)
 c
@@ -1140,7 +1184,7 @@ c
 c
 c   updating the nonlinear terms
 c
-            ruro(ic,jc,kc)=hro(ic,jc,kc)
+                ruro(ic,jc,kc)=hro(ic,jc,kc)
    25 continue
 !$OMP  END PARALLEL DO
       do 26 kc=1,n3m
@@ -1161,16 +1205,16 @@ c
 c
 c   11 second deriv. of dens(n)
 c
-          d11q1=(dens(ip,jc,kc)-dens(ic,jc,kc)*2.+dens(im,jc,kc))
-     %          *udx1q
+          d11q1=(dens(ip,jc,kc)-dens(ic,jc,kc)*2.+dens(im,jc,kc))*
+     %      udx1q
 c
 c   22 second deriv. of dens(n)
 c
           d22q1=((dens(ic,jp,kc)-dens(ic,jc,kc))
-     %           *dx2*rc(jp)**2/g2rc(jp)
-     %           -(dens(ic,jc,kc)-denbs(ic,kc))
-     %           *dx2*rc(jc)**2/g2rc(jc)*2.)
-     %          *dx2/(g2rm(jc)*rm(jc)**2)
+     %          *dx2*rc(jp)**2/g2rc(jp)
+     %          -(dens(ic,jc,kc)-denbs(ic,kc))
+     %          *dx2*rc(jc)**2/g2rc(jc)*2.)
+     %         *dx2/(g2rm(jc)*rm(jc)**2)
 c
 c   33 second deriv. of dens(n)
 c
@@ -1189,7 +1233,7 @@ c
 c   evaluation of RHS
 c
           rhs(iadd)=(ga*hro(ic,jc,kc)+ro*ruro(ic,jc,kc)
-     %                 +alre*dcq1)*dt
+     %              +alre*dcq1)*dt
 c
 c   updating the nonlinear terms
 c
@@ -1425,8 +1469,8 @@ c
 c
 c   11 second derivative of q2
 c
-            d11q2=(q2(ip,jc,kc)-2.*q2(ic,jc,kc)+q2(im,jc,kc))*
-     %            udx1q
+            d11q2=(q2(ip,jc,kc)-2.*q2(ic,jc,kc)+q2(im,jc,kc))
+     %            *udx1q
 c
 c   22 second derivative of q2
 c
@@ -1536,6 +1580,30 @@ c
             dq33=q3(ic,jc,kp)*ap3k(jc,kc)
      %          +q3(ic,jc,kc)*ac3k(jc,kc)
      %          +q3(ic,jc,km)*am3k(jc,kc)
+C     if(rm(jc).le.0.35) then
+C     icon = icon+1
+C     fff = (1.-cos(2.*zz(kc)))/rm(jc)**2
+C     if(abs(fff-dq33).gt.1.e-9) then 
+C      ferr = (fff-dq33)/((abs(fff)+small))
+C     else
+C      ferr = small
+C     end if
+C     write(888,1888) icon,ic,jc,kc,thetac(ic),rm(jc),zm(kc),
+C    % q3(ic,jc,kc),q3(ic,jc,kc),fff,dq33,ferr
+C     end if
+c     if(rm(jc).le.0.35) then
+c     icon = icon+1
+c     fff = -cos(thetam(ic))*(sin(2.*zz(kc))+cos(zz(kc))/sin(zz(kc)))
+c    %       /rm(jc)**2
+c     if(abs(fff-dq33).gt.1.e-9) then 
+c      ferr = (fff-h11)/((abs(fff)+small))
+c     else
+c      ferr = small
+c     end if
+c     write(888,1888) icon,ic,jc,kc,thetac(ic),rm(jc),zm(kc),
+c    % q1(ic,jc,kc),q1(ic,jc,kc),fff,h11,ferr
+c     end if
+c1888 format(i5,3(1x,i3),8(1x,e12.5))
 c
 c   viscous terms
 c
@@ -1570,9 +1638,10 @@ c     go to 5566
 !$OMP$ SHARED(kc,km,kp,jpv,jmv,n2m,n1m,ipv,imv)
 !$OMP$ SHARED(ksyc,isym,qaxN,dx1,dx1q,dx3q)
 !$OMP$ SHARED(fvisc1e,fvisc2e,fvisc3e)
-!$OMP$ SHARED(q3,ap3j,ac3j,am3j,pr,sinpc,rm,g3rc,g3rm)
+!$OMP$ SHARED(q3,ap3j,ac3j,am3j,pr,rm,g3rc,g3rm)
+!$OMP$ SHARED(sinpc,usinpc)
 !$OMP$ SHARED(al,ga,ro,qcap,ru3,alre,dt,udx3c,usrm,rhs)
-!$OMP$ PRIVATE(knsy,insy,insym,usinpc)
+!$OMP$ PRIVATE(knsy,insy,insym)
 !$OMP$ PRIVATE(jp,jpp,jmm,ip,ipp,imm)
 !$OMP$ PRIVATE(q3sym1,dq31,dq32,dq33,dcq3,dpx33)
 !$OMP$ PRIVATE(h31,iadd,aap,aac,aam,udx1q,udx1,udx3,ic,jc)
@@ -1606,6 +1675,44 @@ c         q3sym1=0.5*(q3(ic,jc,kc)-q3(insy,jc,kc))/sin(zz(kc))
      %                -q3(ic,jc,kc)/sin(zz(kc)))/g3rm(kc)-
      %    sin(zm(km))*(q3(ic,jc,kc)/sin(zz(kc))-q3sym1)/g3rm(km)) 
      %    -q3(ic,jc,kc)/(rm(jc)*sin(zz(kc)))**2
+C     if(rm(jc).le.0.35) then
+C     icon = icon+1
+C     fff = (1.-cos(2.*zz(kc)))/rm(jc)**2
+C     if(abs(fff-dq33).gt.1.e-9) then 
+C      ferr = (fff-dq33)/((abs(fff)+small))
+C     else
+C      ferr = small
+C     end if
+C     write(888,1888) icon,ic,jc,kc,thetac(ic),rm(jc),zm(kc),
+C    % q3(ic,jc,kc),q3(ic,jc,kc),fff,dq33,ferr
+C     end if
+C1888 format(i5,3(1x,i3),8(1x,e12.5))
+c           dq33=dx3q/(rm(jc)**2*g3rc(kc))*(
+c    %      sinpm(kc)*(q3(ic,jc,kp)*usinpc(kp)-q3(ic,jc,kc)*usinpc(kc))
+c    %               /g3rm(kc)-
+c    %      sinpm(km)*(q3(ic,jc,kc)*usinpc(kc)-q3sym1)/g3rm(km)) -
+c    %       q3(ic,jc,kc)/(rm(jc)*sinpc(kc))**2
+c           dq33 = 0.
+c           dq33=dx3/rc(jc)**2*(dx3/g3rm(kc)*sinpm(kc)*
+c    %      (q3(ic, jc, kp)*usinpc(kp)-q3(ic, jc, kc)*usinpc(kc))-
+c    %      dx3/g3rm(kc)*sinpm(km)*(q3(ic, jc, kc)*usinpc(kc)-q3sym1))
+c           dq33=0.
+c           write(*,*) ic,jc,q3sym1,dq33
+c           write(*,*) usinpc(kc),g3rm(kc),g3rc(kc)
+c           write(*,*) 
+c    %      (q3(ic,jc,kp)*usinpc(kp)-q3(ic,jc,kc)*usinpc(kc))/g3rm(kc)
+c           write(*,*) 
+c    %      (q3(ic,jc,kc)*usinpc(kc)-q3sym1)/g3rm(km) 
+c           write(*,*) 
+c    %       q3(ic,jc,kc)/(rm(jc)*sinpc(kc))**2
+c           pause
+
+c!    a33=dx3q/(g3rc(kc)*rm(jc)**2)
+c!    a33p= +a33*sinpm(kc)/g3rm(kc)
+c!    a33m= +a33*sinpm(km)/g3rm(km)
+c!    ap3k(jc,kc)=a33p/sinpc(kp)
+c!    am3k(jc,kc)=a33m/sinpc(km)
+c!    ac3k(jc,kc)=-(a33p+a33m)/sinpc(kc)-usrmq(jc)*usinpc(kc)**2
 c
 c   11 second derivatives of q3
 c
@@ -1633,7 +1740,7 @@ c
 c
 c  updating of the non-linear terms
 c
-          ru3(ic,jc,kc)=qcap(ic,jc,kc)
+            ru3(ic,jc,kc)=qcap(ic,jc,kc)
         end do
       end do
 !$OMP  END PARALLEL DO
@@ -1645,9 +1752,10 @@ c
 !$OMP$ SHARED(kc,km,kp,jpv,jmv,n2m,n1m,ipv,imv)
 !$OMP$ SHARED(ksym,isym,qaxN,dx1,dx1q,dx3q)
 !$OMP$ SHARED(fvisc1e,fvisc2e,fvisc3e)
-!$OMP$ SHARED(q3,ap3j,ac3j,am3j,pr,sinpc,sinpm,rm,g3rc,g3rm)
+!$OMP$ SHARED(q3,ap3j,ac3j,am3j,pr,rm,g3rc,g3rm)
+!$OMP$ SHARED(sinpc,sinpm,usinpc)
 !$OMP$ SHARED(al,ga,ro,qcap,ru3,alre,dt,udx3c,usrm,rhs)
-!$OMP$ PRIVATE(knsy,insy,insym,usinpc)
+!$OMP$ PRIVATE(knsy,insy,insym)
 !$OMP$ PRIVATE(jp,jpp,jmm,ip,ipp,imm)
 !$OMP$ PRIVATE(q3symn3m,dq31,dq32,dq33,dcq3,dpx33)
 !$OMP$ PRIVATE(h31,iadd,aap,aac,aam,udx1q,udx1,udx3,ic,jc)
@@ -1681,12 +1789,30 @@ c
 c   33 second derivatives of q3 modified for north pole
 c
 
+c         q3symn3m=0.5*usinpc(kc)*(q3(ic, jc, kc)-q3(insy, jc, kc))
+c         dq33=dx3/rc(jc)**2*(dx3/g3rm(kc)*sinpm(kc)*
+c    %    (q3symn3m-q3(ic, jc, kc)*usinpc(kc))- dx3/g3rm(kc)*sinpm(km)
+c    %    *(q3(ic, jc, kc)*usinpc(kc)-q3(ic, jc, kp)*usinpc(kp)))
+c         q3symn3m=0.5*(usinpc(kc)*q3(ic,jc,kc)-
+c    %                    usinpc(kc)*q3(insy,jc,kc))
           q3symn3m = qaxN(3,ic,jc)
           dq33=dx3q/(rm(jc)**2*g3rc(kc))
      %      *(sinpm(kc)*(q3symn3m-q3(ic,jc,kc)*usinpc(kc))/g3rm(kc)
      %        -sinpm(km)*(q3(ic,jc,kc)*usinpc(kc)
      %                    -q3(ic,jc,km)*usinpc(km))/g3rm(km))
      %      -q3(ic,jc,kc)/(rm(jc)*sinpc(kc))**2
+c     if(rm(jc).le.0.35) then
+c     icon = icon+1
+c     fff = (1.-cos(2.*zz(kc)))/rm(jc)**2
+c     if(abs(fff-dq33).gt.1.e-9) then 
+c      ferr = (fff-dq33)/((abs(fff)+small))
+c     else
+c      ferr = small
+c     end if
+c     write(888,1888) icon,ic,jc,kc,thetac(ic),rm(jc),zm(kc),
+c    % q3(ic,jc,kc),q3(ic,jc,kc),fff,dq33,ferr
+c     end if
+c           dq33 = 0.
 c
 c   viscous terms
 c
@@ -1865,26 +1991,26 @@ c
 !$OMP$ PRIVATE(amil,apil,acil,fil,iadd,faci)
 !$OMP$ PRIVATE(ugmmm,ugm2,ic,jc,kc)
       do kc=1,n3m
-       do ic=1,n1m
-        do jc=1,n2m
-         ugmmm=betadx*(usrm(jc)*usinpm(kc))**2
-         faci=1.+ugmmm*2.*fvisc1(jc,kc)
-         apil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
-         amil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
-         acil(jc,ic)=1.
-         iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2m
-         fil(jc,ic) = rhs(iadd)/faci
+        do ic=1,n1m
+          do jc=1,n2m
+            ugmmm=betadx*(usrm(jc)*usinpm(kc))**2
+            faci=1.+ugmmm*2.*fvisc1(jc,kc)
+            apil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
+            amil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
+            acil(jc,ic)=1.
+            iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2m
+            fil(jc,ic) = rhs(iadd)/faci
+          end do
         end do
-       end do
-c
-       call tripvmy(amil,acil,apil,fil,1,n1m,1,n2m,m1,m2)
-c
-       do ic=1,n1m
-        do jc=1,n2m
-         iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2m
-         rhs(iadd) = fil(jc,ic)
+c 
+        call tripvmy(amil,acil,apil,fil,1,n1m,1,n2m,m1,m2)
+c 
+        do ic=1,n1m
+          do jc=1,n2m
+            iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2m
+            rhs(iadd) = fil(jc,ic)
+          end do
         end do
-       end do
       end do
 !$OMP  END PARALLEL DO
 c
@@ -1944,13 +2070,25 @@ c
         do ii=1,nm
           jc=n2m-ii
           do ic=1,n1m
-           iadd=ic+(jc-1)*n1m+(kc-1)*n1m*n2m
-           fjl(ic,jc)=(fjl(ic,jc)-apjl(jc)*fjl(ic,jc+1))/acjl(jc)
-           rhs(iadd)=fjl(ic,jc)
+            iadd=ic+(jc-1)*n1m+(kc-1)*n1m*n2m
+            fjl(ic,jc)=(fjl(ic,jc)-apjl(jc)*fjl(ic,jc+1))/acjl(jc)
+            rhs(iadd)=fjl(ic,jc)
           end do
         end do
       end do
 !$OMP  END PARALLEL DO
+c
+ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+c
+c     call ntrvb(amjl,acjl,apjl,fjl,m1,m2,n2m,n1m)
+c
+c       do jc=1,n2m
+c         do ic=1,n1m
+c           iadd=ic+(jc-1)*n1m+(kc-1)*n1m*n2m
+c           rhs(iadd) = fjl(ic,jc)
+c         end do
+c       end do
+c     end do
       return
       end
 c
@@ -2003,8 +2141,8 @@ c
         do ii=1,nm
           kc=n3m-ii
           do ic=1,n1m
-            fkl(ic,kc)=
-     %                 (fkl(ic,kc)-apkl(kc)*fkl(ic,kc+1))/ackl(kc)
+c           q1(ic,jc,kc)=q1(ic,jc,kc) +
+            fkl(ic,kc)=(fkl(ic,kc)-apkl(kc)*fkl(ic,kc+1))/ackl(kc)
             dens(ic,jc,kc)=dens(ic,jc,kc) + fkl(ic,kc)
           end do
         end do
@@ -2052,26 +2190,26 @@ c
 !$OMP$ PRIVATE(amil,apil,acil,fil,iadd,faci)
 !$OMP$ PRIVATE(ugmmm,ugm2,ic,jc,kc)
       do kc=1,n3m
-       do ic=1,n1m
-        do jc=1,n2m
-         ugmmm=betadx*(usrm(jc)*usinpm(kc))**2
-         faci=1.+ugmmm*2.*fvisc1(jc,kc)
-         apil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
-         amil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
-         acil(jc,ic)=1.
-         iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2m
-         fil(jc,ic) = rhs(iadd)/faci
+        do ic=1,n1m
+          do jc=1,n2m
+            ugmmm=betadx*(usrm(jc)*usinpm(kc))**2
+            faci=1.+ugmmm*2.*fvisc1(jc,kc)
+            apil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
+            amil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
+            acil(jc,ic)=1.
+            iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2m
+            fil(jc,ic) = rhs(iadd)/faci
+          end do
         end do
-       end do
 c
-       call tripvmy(amil,acil,apil,fil,1,n1m,1,n2m,m1,m2)
+        call tripvmy(amil,acil,apil,fil,1,n1m,1,n2m,m1,m2)
 c
-       do ic=1,n1m
-        do jc=1,n2m
-         iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2m
-         rhs(iadd) = fil(jc,ic)
+        do ic=1,n1m
+          do jc=1,n2m
+            iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2m
+            rhs(iadd) = fil(jc,ic)
+          end do
         end do
-       end do
       end do
 !$OMP  END PARALLEL DO
 c
@@ -2203,8 +2341,7 @@ c
           kc=n3m-ii
           do ic=1,n1m
 c           q1(ic,jc,kc)=q1(ic,jc,kc) +
-            fkl(ic,kc)=
-     %                 (fkl(ic,kc)-apkl(kc)*fkl(ic,kc+1))/ackl(kc)
+            fkl(ic,kc)=(fkl(ic,kc)-apkl(kc)*fkl(ic,kc+1))/ackl(kc)
             q1(ic,jc,kc)=q1(ic,jc,kc) + fkl(ic,kc)
           end do
         end do
@@ -2464,11 +2601,11 @@ c
 !$OMP$ PRIVATE(amil,apil,acil,fil,iadd,faci)
 !$OMP$ PRIVATE(ugmmm,ugm2,im,ip,km,ic,jc,kc)
       do kc=2,n3m
-        do ic=1,n1m
-          im = imv(ic)
-          ip = ipv(ic)
-          do jc=1,n2m
-            ugmmm=betadx*udx1qm(jc)*usinpc(kc)**2
+          do ic=1,n1m
+            im = imv(ic)
+            ip = ipv(ic)
+        do jc=1,n2m
+          ugmmm=betadx*udx1qm(jc)*usinpc(kc)**2
             faci=1.+ugmmm*2.*fvisc1(jc,kc)
             apil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
             amil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
@@ -2611,17 +2748,16 @@ c
             fkl(ic,kc)=fkl(ic,kc)*ackl(kc-1)-fkl(ic,kc-1)*amkl(kc)
           end do
         end do
-c  
+c
         do ic=1,n1m
           fkl(ic,n3)=fkl(ic,n3)/ackl(n3)
         end do
-c  
+c
         nm=n3-1
         do ii=1,nm
           kc=n3-ii
           do ic=1,n1m
-            fkl(ic,kc)=
-     %                 (fkl(ic,kc)-apkl(kc)*fkl(ic,kc+1))/ackl(kc)
+            fkl(ic,kc)=(fkl(ic,kc)-apkl(kc)*fkl(ic,kc+1))/ackl(kc)
           end do
         end do
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
@@ -2780,7 +2916,7 @@ C a1 = rotazione sistema riferimento attorno a versore x
 C a2 = rotazione sistema riferimento attorno a versore y
 C a3 = rotazione sistema riferimento attorno a versore z
 
-      a1=-2.*pi/4.  !-2.*pi/4 
+      a1=-2.*pi/4.
       a2=-2.*pi/4.
       a3=pi/2.
 

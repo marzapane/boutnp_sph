@@ -1,14 +1,14 @@
-c      parameter (m1=97,m2=101,m3=1025,ndd=2,ndv=3)
-c      parameter (m1=257,m2=193,m3=1537,ndd=2,ndv=3)
+c     parameter (m1=97,m2=101,m3=1025,ndd=2,ndv=3)
+c     parameter (m1=257,m2=193,m3=1537,ndd=2,ndv=3)
 c     parameter (m1=193,m2=129,m3=513,ndd=2,ndv=3)
 c     parameter (m1=385,m2=257,m3=1025,ndd=2,ndv=3)
-c      parameter (m1=385,m2=302,m3=1382,ndd=2,ndv=3)	! big
+c     parameter (m1=385,m2=302,m3=1382,ndd=2,ndv=3)	! big
 c     parameter (m1=257,m2=257,m3=257,ndd=2,ndv=3)     ! small
-        parameter (m1=129,m2=65,m3=129,ndd=2,ndv=3)        ! little
-c       parameter (m1=257,m2=193,m3=770,ndd=2,ndv=3)
+      parameter (m1=129,m2=65,m3=129,ndd=2,ndv=3)        ! little
+c     parameter (m1=257,m2=193,m3=770,ndd=2,ndv=3)
 c     parameter (m1=97,m2=129,m3=257,ndd=2,ndv=3)
-c      parameter (m1=33,m2=33,m3=64,ndd=2,ndv=3)         ! solo per assuref
-c      parameter (m1=385,m2=385,m3=385,ndd=2,ndv=3)
+c     parameter (m1=33,m2=33,m3=64,ndd=2,ndv=3)         ! solo per assuref
+c     parameter (m1=385,m2=385,m3=385,ndd=2,ndv=3)
       parameter (m1m=m1-1,m2m=m2-1,m3m=m3-1)
       parameter (m3mh=m3m/2+1)
       parameter (m12=2*m1m,m3c=2*m3m,m32=2*m3c)
@@ -145,3 +145,4 @@ C      NUOVE AGGIUNTE
      %                 cospc(m3),cospm(m3),utanpc(m3),
      %                 udx3vis2(m3),utanpm(m3)
       common /forcing/ iforc
+      common /icond/ indexForInitial

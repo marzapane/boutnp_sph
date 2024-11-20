@@ -110,6 +110,7 @@ c
 c     inversion of the matrix in the x2 and x3 directions (real part)
 c    
 c
+c     dph_max = 0.
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(acphk,amphk,apphk,amphj,acphj,apphj)
 !$OMP$ SHARED(dph,n1,n1mh,n2m,n3m,w)
@@ -142,10 +143,12 @@ c       write(6,*) ' 2 IERROR = ',ierror
           do k=1,n3m
 CC          dph(ii,j,k)=yfisl(k,j)
             dph(i,j,k)=yfisl(k,j)
+c           dph_max = max(abs(dph(i,j,k)),dph_max)
           end do
         end do
       end do
 !$OMP END PARALLEL DO
+c     write(6,*) 'dph_max=',dph_max
 c
 c    
 c   inverse fft applied to the phi x1 direction

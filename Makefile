@@ -30,9 +30,12 @@ FC=gfortran -fopenmp
 # LINUX
 OP_COMP = -w
 OP_COMP += -fdefault-real-8
-OP_COMP += -O3
+# OP_COMP += -O3
 #----------------------------------------
-BUINCLUDE = src/param.f 
+# DEBUG OPTIONS
+OP_COMP += -Og -Wall -fbacktrace -g # -fsanitize=thread
+#----------------------------------------
+BUINCLUDE = src/param.f
 OBJS = obj/bounn.o obj/boutn.o obj/bouhd.o obj/pressnu.o obj/ffts.o obj/fishpack.o obj/tsch.o
 
 outnp_sph: directories $(OBJS)
@@ -40,6 +43,12 @@ outnp_sph: directories $(OBJS)
 
 obj/%.o : src/%.f $(BUINCLUDE)
 	$(FC) -c $(OP_COMP) $< -o $@
+
+obj/ffts.o : src/ffts.f $(BUINCLUDE)
+	$(FC) -c -w -fdefault-real-8 -O3 $< -o $@
+
+obj/fishpack.o : src/fishpack.f $(BUINCLUDE)
+	$(FC) -c -w -fdefault-real-8 -O3 $< -o $@
 
 directories:
 	mkdir -p obj

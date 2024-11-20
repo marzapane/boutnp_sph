@@ -262,8 +262,8 @@ c
      %       * rm(jc)/r_max * cos(om_ph * zm(kc))
 
       dq(ic,jc,kc)=d11q2e+d11q3e-hq1+coriol
-     %             -densit*(sin(thetac(ic)))        !gravita'' diretta lungo x
-     %             +float(iforc)*forc                            !simple oscillating random forcing
+     %             -densit*(sin(thetac(ic))) !gravita'' diretta lungo x
+     %             +float(iforc)*forc        !simple oscillating random forcing
    10 continue
 !$OMP  END PARALLEL DO
 c
@@ -431,8 +431,8 @@ c
      %       * rm(jc)/r_max * cos(om_ph * zm(kc))
 
       dph(ic,jc,kc)=d11q1v+d33q3v-hq2+coriol
-     %               +densit*(sinpm(kc)*cos(thetam(ic)))        !gravita'' allimeata in x
-     %               +float(iforc)*forc                            !simple oscillating random forcing
+     %               +densit*(sinpm(kc)*cos(thetam(ic))) !gravita'' allimeata in x
+     %               +float(iforc)*forc                  !simple oscillating random forcing
 c    %               +densit*(-cospm(kc))         !gravita'' verticale
 c    %               +densit*(rc(n2)/rc(jc))**2  !tutta la massa al centro
 c    %               +densit                     !gravita' costante
@@ -463,7 +463,7 @@ c     definition of the random coeff. for the forcing
       ivisc3 = 1
       small = 1.e-10
       icon = 0
-
+      usros = 1.d0/ros
       sudx1vis2 = 2.*dx1/ren
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,jpv,jmv,ipv,imv)
@@ -613,8 +613,8 @@ c
  
 
       qcap(ic,jc,kc)=d11q1v+d11q2v-hq3+coriol
-     %               +densit*(+cospc(kc)*cos(thetam(ic)))         !gravita'' allimeata in x
-     %               +float(iforc)*forc                            !simple oscillating random forcing
+     %               +densit*(+cospc(kc)*cos(thetam(ic))) !gravita'' allimeata in x
+     %               +float(iforc)*forc                   !simple oscillating random forcing
 c    %               +densit*(+sinpc(kc))         !gravita'' verticale
 c
    30 continue
