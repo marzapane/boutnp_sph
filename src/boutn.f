@@ -61,13 +61,13 @@ c     init_time(1)=timef()
 c
       call initia
 C**************************
-       imovie = 0
-       tframe = 0.05
+      imovie = 0
+      tframe = 0.05
 C**************************
-c      fvisc = 1.000 
-c      fvisc1 = 1.0000 
-c      fvisc2 = 1.00
-c      fvisc3 = 0.0000 
+c     fvisc = 1.000 
+c     fvisc1 = 1.0000 
+c     fvisc2 = 1.00
+c     fvisc3 = 0.0000 
 c
 c     grid information
 c
@@ -94,34 +94,34 @@ c
           write(6,123) i,(mason(i,j),j=1,3)
           write(32,123) i,(mason(i,j),j=1,3)
         end do
-  123 format(2x,'sonda n= ',i3,' : i=',i3,', j=',i3,', k=',i3)
+  123   format(2x,'sonda n= ',i3,' : i=',i3,', j=',i3,', k=',i3)
         do i = 1,nson
           write(6,923) i,(coson(i,j),j=1,3)
           write(32,923) i,(coson(i,j),j=1,3)
         end do
-       endif
+      endif
   923 format(2x,'sonda n= ',i3,' : th=',f8.2,', r=',f8.2,', x=',f8.2)
-          write(6,*)
-          write(32,*)
-          write(6,*) ' AAA '
+      write(6,*)
+      write(32,*)
+      write(6,*) ' AAA '
 C    PRINT 3D coordinate file
       write(*,*)'-------- Grid file -----------'
       do kc=1,n3
         do jc=1,n2
-         do ii=1,n1
-c        ic = ii
-c        if(ii.eq.n1) ic=1
-c         xxx(ic,jc,kc) = rm(jc)*cos(thetam(ic))*sin(zm(kc))
-c         yyy(ic,jc,kc) = rm(jc)*sin(thetam(ic))*sin(zm(kc))
-c         zzz(ic,jc,kc) = rm(jc)*cos(zm(kc))
-c        ic = ii
-c        if(ii.eq.n1) ic=1
-          xxx(ii,jc,kc) = rc(jc)*cos(thetac(ii))*sin(zz(kc))
-          yyy(ii,jc,kc) = rc(jc)*sin(thetac(ii))*sin(zz(kc))
-          zzz(ii,jc,kc) = rc(jc)*cos(zz(kc))
-         end do
+          do ii=1,n1
+c           ic = ii
+c           if(ii.eq.n1) ic=1
+c           xxx(ic,jc,kc) = rm(jc)*cos(thetam(ic))*sin(zm(kc))
+c           yyy(ic,jc,kc) = rm(jc)*sin(thetam(ic))*sin(zm(kc))
+c           zzz(ic,jc,kc) = rm(jc)*cos(zm(kc))
+c           ic = ii
+c           if(ii.eq.n1) ic=1
+            xxx(ii,jc,kc) = rc(jc)*cos(thetac(ii))*sin(zz(kc))
+            yyy(ii,jc,kc) = rc(jc)*sin(thetac(ii))*sin(zz(kc))
+            zzz(ii,jc,kc) = rc(jc)*cos(zz(kc))
+          end do
         end do
-       end do
+      end do
 
       namfi='grid.xyz'
 
@@ -140,11 +140,11 @@ c
 c   read or create initial fields
 c
       call phini
-          write(6,*) ' AAA2 '
+      write(6,*) ' AAA2 '
 c
-        do 22 l=1,ndv
-           vmax(l)=0.
-   22   continue
+      do 22 l=1,ndv
+        vmax(l)=0.
+   22 continue
 c
       call densbo
 c
@@ -200,31 +200,31 @@ c
       write(32,711)tprint,ntii,ntstf,tpin
   711 format(3x,'check in cond : tprint =',f8.4,'  ntii =',i8,
      1       '  ntstf =',i8,2x,'tpin =',f8.4//)
-            if(idtv.eq.1) then
-      write(6,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(1
+      if(idtv.eq.1) then
+        write(6,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(1
      %),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),imaxv(3),jma
      %xv(3),kmaxv(3),dt,qmax,iqm,jqm,kqm,densm,densmax,densmin'
-      write(32,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(
+        write(32,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(
      %1),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),imaxv(3),jm
      %axv(3),kmaxv(3),dt,qmax,iqm,jqm,kqm,densm,densmax,densmin'
 c       call outh(time,dt)
 c       if(iaxsy.ne.0) call enerc(time)
 c       if(nson.ne.0) call wson(time)
-            else
-      write(6,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(1
+      else
+        write(6,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(1
      %),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),imaxv(3),jma
      %xv(3),kmaxv(3),cflm,qmax,iqm,jqm,kqm,densm,densmax,densmin'
-      write(32,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(
+        write(32,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(
      %1),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),imaxv(3),jm
      %axv(3),kmaxv(3),cflm,qmax,iqm,jqm,kqm,densm,densmax,densmin'
         cflm=cflm*dt
 c       call outh(time,cflm)
 c       if(iaxsy.ne.0) call enerc(time)
 c       if(nson.ne.0) call wson(time)
-            endif
+      endif
 c
-         call coetar
-          write(6,*) ' AAA5 '
+      call coetar
+      write(6,*) ' AAA5 '
 c
 c     init_time(2)=timef()
       write(6,*) '       Init Time = '
@@ -245,64 +245,65 @@ c     stability conditions (courant number restrictions)
 c
 c           iter_time(1)=timef()
 c
-            call cfl(cflm)
-            if(idtv.eq.1) then
-              if(ntime.ne.1) then
-                 dt=cflmax/cflm
-                 if(dt.gt.dtmax) dt=dtmax
-              endif
-              if(dt.lt.1E-16) go to 166
-            else
-              cflm=cflm*dt
-              if(cflm.gt.cfllim) go to 165
-            endif
-            beta=dt/ren*0.5
-            call tschem(time)
-c                    call outpf(time)
-c                    pause
-            time=time+dt
-            if(ntime.eq.1) go to 306
-            if(nson.ne.0) then
-              if(mod(time,tpin/4.).lt.dt) call wson(time)
-            end if
-            if(mod(time,tpin).lt.dt) go to 306
-            go to 305
-  306 continue
-            call vmaxv
-            if(vmax(1).gt.1000.and.vmax(2).gt.1000) go to 266
-            call cfl(cflm)
-            call divgck(dmax,dtot)
-            call densmc
-            if(idtv.eq.1) then
-              call outh(time,dt)
-              call diss(time)
-CC            if(iaxsy.ne.0) call enerc(time)
-CRV           if(nson.ne.0) call wson(time)
-            else
-              cflm=cflm*dt
-              call outh(time,cflm)
-              call diss(time)
-CC            if(iaxsy.ne.0) call enerc(time)
-CRV           if(nson.ne.0) call wson(time)
-            endif
-            if(dmax.gt.resid) go to 169
+        call cfl(cflm)
+        if(idtv.eq.1) then
+          if(ntime.ne.1) then
+            dt=cflmax/cflm
+            if(dt.gt.dtmax) dt=dtmax
+          endif
+          if(dt.lt.1E-16) go to 166
+          else
+            cflm=cflm*dt
+          if(cflm.gt.cfllim) go to 165
+        endif
+        beta=dt/ren*0.5
+        call tschem(time)
+c       call outpf(time)
+c       pause
+        time=time+dt
+        if(ntime.eq.1) go to 306
+        if(nson.ne.0) then
+          if(mod(time,tpin/4.).lt.dt) call wson(time)
+        endif
+        if(mod(time,tpin).lt.dt) go to 306
+        go to 305
+  306   continue
+        call vmaxv
+        if(vmax(1).gt.1000.and.vmax(2).gt.1000) go to 266
+        call cfl(cflm)
+        call divgck(dmax,dtot)
+        call densmc
+        if(idtv.eq.1) then
+          call outh(time,dt)
+          call diss(time)
+CC        if(iaxsy.ne.0) call enerc(time)
+CRV       if(nson.ne.0) call wson(time)
+        else
+          cflm=cflm*dt
+          call outh(time,cflm)
+          call diss(time)
+CC        if(iaxsy.ne.0) call enerc(time)
+CRV       if(nson.ne.0) call wson(time)
+        endif
+        if(dmax.gt.resid) go to 169
 c
-  305 continue
+  305   continue
 c
 c     write the flow field
 c
-            if(mod(time,tprint/2.).lt.dt) then
-                if(nwrit.eq.1) then
-                  call continua(time)
-                endif
-            endif
-            if(mod(time,tprint).lt.dt) then
-                     call outpf(time)
-            endif
-                 if(time.gt.tmax) go to 167
+        if(mod(time,tprint/2.).lt.dt) then
+          if(nwrit.eq.1) then
+            call continua(time)
+          endif
+        endif
+        if(mod(time,tprint).lt.dt) then
+          call outpf(time)
+          call spect(time)
+        endif
+        if(time.gt.tmax) go to 167
 c
-c           iter_time(2)=timef()
-c           write(6,*) '  Iteration Time = '
+c       iter_time(2)=timef()
+c       write(6,*) '  Iteration Time = '
 c    &             ,(iter_time(2)-iter_time(1))*0.001
 c
   350 continue
