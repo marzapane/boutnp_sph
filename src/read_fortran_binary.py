@@ -94,3 +94,24 @@ ax.set_zlabel('z')
 # Show plot
 plt.show()
 
+def readspctr(time):
+    with open('spctr_' + time + '.bin','rb') as f:
+        _ = np.fromfile(f, dtype=np.int32, count=1)
+        n3m = np.fromfile(f, dtype=np.int32, count=1)[0]
+        n1mh = np.fromfile(f, dtype=np.int32, count=1)[0]
+        _ = np.fromfile(f, dtype=np.int32, count=2)
+        modes = np.fromfile(f, dtype=np.float64, count=n3m*n1mh).reshape(n3m,n1mh, order='F')
+        _ = np.fromfile(f, dtype=np.int32, count=2)
+        spctr = np.fromfile(f, dtype=np.float64, count=n3m*n1mh).reshape(n3m,n1mh, order='F')
+        _ = np.fromfile(f, dtype=np.int32, count=2)
+        time = np.fromfile(f, dtype=np.float64, count=1)[0]
+        print('Imported arrays <modes> and <spctr> of size ' + str(n3m) + 'x' + str(n1mh) + ', at time ' + str(time))
+        return modes, spctr
+
+plot = plt.contourf(np.repeat(np.arange(64)[:,np.newaxis],33,axis=1),modes,spctr,np.logspace(np.log10(spctr.min()),np.log10(spctr.max()),50),locator=ticker.LogLocator(),)
+plt.yscale('log')
+cbar = plt.colorbar(plot)
+cbar.locator = ticker.LogLocator(10)
+cbar.set_ticks(cbar.locator.tick_values(spctr.min(), spctr.max()))
+cbar.minorticks_off()
+plt.show()
