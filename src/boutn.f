@@ -272,6 +272,7 @@ c       pause
         if(vmax(1).gt.1000.and.vmax(2).gt.1000) go to 266
         call cfl(cflm)
         call divgck(dmax,dtot)
+        if(dtot .ne. dtot) go to 366
         call densmc
         if(idtv.eq.1) then
           call outh(time,dt)
@@ -316,17 +317,22 @@ c
   165 continue
       write(6,164)
       write(32,164)
-  164 format(10x,'cfl troppo grande   ')
+  164 format(10x,'too large CFL')
       go to 167
   166 continue
-      write(6,168)
+      write(6,168) dt
       write(32,168) dt
-  168 format(10x,'dt troppo piccolo  DT = ',e14.7)
+  168 format(10x,'too small dt = ',e14.7)
       go to 167
   266 continue
       write(6,268)
       write(32,268)
   268 format(10x,'velocities diverged')
+      go to 167
+  366 continue
+      write(6,368)
+      write(32,368)
+  368 format(10x,'NaN appeared')
       go to 167
   169 continue
       write(6,178) dmax,imxq,jmxq,kmxq

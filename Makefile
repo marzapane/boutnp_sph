@@ -31,7 +31,7 @@ FC=gfortran -fopenmp
 OP_COMP = -w
 OP_COMP += -fdefault-real-8
 OP_COMP += -mcmodel=large
-# OP_COMP += -O3
+OP_COMP += -O3
 #----------------------------------------
 # DEBUG OPTIONS
 # OP_COMP += -Og -Wall -fbacktrace -g # -fsanitize=thread
@@ -46,7 +46,7 @@ obj/%.o : src/%.f $(BUINCLUDE)
 	$(FC) -c $(OP_COMP) $< -o $@
 
 obj/fishpack.o : src/fishpack.f $(BUINCLUDE)
- 	$(FC) -c -w -fdefault-real-8 -mcmodel=large -O3 $< -o $@
+	$(FC) -c -w -fdefault-real-8 -mcmodel=large -O3 $< -o $@
 
 directories:
 	mkdir -p obj
