@@ -191,46 +191,35 @@ c***********************************************************************
       subroutine openfi
       include'param.f'
       character*14 filth,filte,filba,filen,filso,filve,filnu,filbaper
-      character*14 nome
-      character*2 nums
-      character*5 fili
       common/names/filth,filte,filba,filen,filso,filve,filnu,filbaper
-      filbaper = 'filbaper.out'
-      open(46,file='nfbou',status='old')
-      read(46,'(a)')filth
-      read(46,'(a)')filte
-      read(46,'(a)')filba
-      read(46,'(a)')filen
-      read(46,'(a)')filso
+c     open(46,file='nfbou',status='old')
+c     read(46,'(a)')filth
+c     read(46,'(a)')filte
+c     read(46,'(a)')filba
+c     read(46,'(a)')filen
+c     read(46,'(a)')filso
+      filth = 'bou.out'
+      filte = 'boute.out'
+c     filba = 'bouba.out'
+      filen = 'bouen.out'
+c     filso = 'paso'
+c     filbaper = 'filbaper.out'
       open(32,file=filth,status='unknown')
-      open(34,file=filba,status='unknown')
-      open(35,file=filbaper,status='unknown')
-      open(39,file=filen,status='unknown')
+c     open(34,file=filba,status='unknown')
+c     open(35,file=filbaper,status='unknown')
+c     open(39,file=filen,status='unknown')
       open(97,file=filte,status='unknown')
-      filnu='nusse.out'
+c     filnu='nusse.out'
       filve='maxvel.out'
-      open(95,file=filnu,status='unknown')
+c     open(95,file=filnu,status='unknown')
       open(96,file=filve,status='unknown')
-c     if(nson.ne.0) then
-c      nul=50
-c      write(fili,200) filso
-c200   format(a5)
-c      do i=1,nson
-c      write(nums,100) i
-c100   format(i2.2)
-c      nome=fili//nums//'.out'
-c      open(nul,file=nome,status='unknown')
-c      rewind(nul)
-c      nul=nul+i
-c      end do
-c     endif
       rewind(32)
-      rewind(34)
-      rewind(35)
-      rewind(39)
+c     rewind(34)
+c     rewind(35)
+c     rewind(39)
       rewind(95)
       rewind(97)
-      close(46)
+c     close(46)
       return
       end
 c
@@ -595,33 +584,33 @@ c
 c
 c     WRITE GRID INFORMATION
 c
-      open(unit=98,file='spacor.out',status='unknown')
-      do i=1,n1
-        write(98,345) i,thetac(i),thetam(i)
-      end do
-      close(98)
-      open(unit=98,file='radcor.out',status='unknown')
-      do j=1,n2
-        write(98,345) j,rc(j),rm(j),g2rc(j),g2rm(j)
-      end do
-      close(98)
-      open(unit=78,file='axicor.out',status='unknown')
-      do k=1,n3
-        write(78,345) k,zz(k),zm(k),g3rc(k),g3rm(k)
-      end do
-      close(78)
- 345  format(i4,4(2x,e13.5))
+c     open(unit=98,file='spacor.out',status='unknown')
+c     do i=1,n1
+c       write(98,345) i,thetac(i),thetam(i)
+c     end do
+c     close(98)
+c     open(unit=98,file='radcor.out',status='unknown')
+c     do j=1,n2
+c       write(98,345) j,rc(j),rm(j),g2rc(j),g2rm(j)
+c     end do
+c     close(98)
+c     open(unit=78,file='axicor.out',status='unknown')
+c     do k=1,n3
+c       write(78,345) k,zz(k),zm(k),g3rc(k),g3rm(k)
+c     end do
+c     close(78)
+c345  format(i4,4(2x,e13.5))
 c
 c     QUANTITIES FOR DERIVATIVES
 c
-      open(unit=78,file='fact3.out',status='unknown')
+c     open(unit=78,file='fact3.out',status='unknown')
        usinpm(1) = 1./sin(zm(1))
        utanpm(1) = 1./tan(zm(1))
        sinpm(1) = sin(zm(1))
        sinpc(1) = sin(zz(1))
        cospm(1) = cos(zm(1))
        cospc(1) = cos(zz(1))
-       write(999,*) zm(1),sin(zm(1)),cos(zm(1)),tan(zm(1))
+c      write(999,*) zm(1),sin(zm(1)),cos(zm(1)),tan(zm(1))
       do k=2,n3m
        utanpc(k) = 1./tan(zz(k))
        utanpm(k) = 1./tan(zm(k))
@@ -631,21 +620,21 @@ c
        sinpc(k) = sin(zz(k))
        cospm(k) = cos(zm(k))
        cospc(k) = cos(zz(k))
-       write(999,*) zm(k),sin(zm(k)),cos(zm(k)),tan(zm(k))
+c      write(999,*) zm(k),sin(zm(k)),cos(zm(k)),tan(zm(k))
       end do
-      close(999)
+c     close(999)
        sinpc(n3) = sin(zz(n3))
        cospc(n3) = cos(zz(n3))
       do k=1,n3m
         udx3m(k) = dx3/g3rm(k)
         udx3c(k) = dx3/g3rc(k)
         udx3vis2(k) = 2.*dx3/g3rm(k)/ren
-        write(78,*) k,udx3m(k),udx3c(k)
+c       write(78,*) k,udx3m(k),udx3c(k)
       end do
       udx3c(n3) = dx3/g3rc(n3)
-        write(78,*) n3,udx3m(n3m),udx3c(n3)
-        close(78)
-      open(unit=78,file='fact2m.out',status='unknown')
+c       write(78,*) n3,udx3m(n3m),udx3c(n3)
+c       close(78)
+c     open(unit=78,file='fact2m.out',status='unknown')
       do j=1,n2m
         rmsg2rm(j) = rm(j)**2/g2rm(j)
         usg2rc(j) = 1.d0/g2rc(j)
@@ -656,22 +645,22 @@ c
         usrm(j) = 1.d0/rm(j)
         usrmq(j) = 1.d0/rm(j)**2
         udx1qm(j) = dx1q/rm(j)**2
-        write(78,*) j,udx2rm(j),udx2m(j),udx2c(j),
-     %               usrm(j),udx1qm(j)
+c       write(78,*) j,udx2rm(j),udx2m(j),udx2c(j),
+c    %               usrm(j),udx1qm(j)
       end do
       usg2rc(n2) = 1.d0/g2rc(n2)
       udx2c(n2) = dx2/g2rc(n2)
-        write(78,*) n2,udx2c(j)
-        close(78)
-      open(unit=78,file='fact2c.out',status='unknown')
+c       write(78,*) n2,udx2c(j)
+c       close(78)
+c     open(unit=78,file='fact2c.out',status='unknown')
         usrc(1) = 1.d0
         udx1qc(1) = 1.d0
       do j=2,n2
         usrc(j) = 1.d0/rc(j)
         udx1qc(j) = dx1q/rc(j)**2
-        write(78,*) j,udx1qc(j),usrc(j)
+c       write(78,*) j,udx1qc(j),usrc(j)
       end do
-        close(78)
+c       close(78)
       do k=1,n3m
       do j=1,n2m
        udx1vis1(j,k)=2./(ren*rm(j)**2*sin(zm(k)))
@@ -689,37 +678,37 @@ c------------------------------------------
       angin=0.25 !zz(4)
       angfi=zz(n3)-0.25 !zz(n3-3)
       do k=1,n3
-       if((zz(k).ge.angin).and.(zz(k).le.angfi)) then
-        vk(k) = 1.
-       end if
-       if(zz(k).le.angin) then
-        vk(k) = small + (1.-small)*(
-     %        3.*(zz(k)/angin)**2-2.*(zz(k)/angin)**3)
-       end if
-       if(zz(k).gt.angfi) then
-        vk(k) = small + (1.-small)*(
-     %         3.*((zz(n3)-zz(k))/(zz(n3)-angfi))**2
-     %        -2.*((zz(n3)-zz(k))/(zz(n3)-angfi))**3)
-       end if
-       write(695,*) zz(k),vk(k)
+        if((zz(k).ge.angin).and.(zz(k).le.angfi)) then
+         vk(k) = 1.
+        end if
+        if(zz(k).le.angin) then
+         vk(k) = small + (1.-small)*(
+     %         3.*(zz(k)/angin)**2-2.*(zz(k)/angin)**3)
+        end if
+        if(zz(k).gt.angfi) then
+         vk(k) = small + (1.-small)*(
+     %          3.*((zz(n3)-zz(k))/(zz(n3)-angfi))**2
+     %         -2.*((zz(n3)-zz(k))/(zz(n3)-angfi))**3)
+        end if
+c       write(695,*) zz(k),vk(k)
       end do
-       close(695)
+c     close(695)
       do j=1,n2
-         rk(j) = 1.
+        rk(j) = 1.
       end do
       small = 1. !0.0002
       ragin=0.25
       do j=1,n2m
-       if(rc(j).ge.ragin) then
-        rk(j) = 1.
-       end if
-       if(rc(j).lt.ragin) then
-        rk(j) = small + (1.-small)*(
-     %        3.*(rc(j)/ragin)**2-2.*(rc(j)/ragin)**3)
-       end if
-       write(694,*) rc(j),rk(j)
+        if(rc(j).ge.ragin) then
+          rk(j) = 1.
+        end if
+        if(rc(j).lt.ragin) then
+          rk(j) = small + (1.-small)*(
+     %          3.*(rc(j)/ragin)**2-2.*(rc(j)/ragin)**3)
+        end if
+c       write(694,*) rc(j),rk(j)
       end do
-       close(694)
+c     close(694)
 c------------------------------------------
       do k=1,n3
       do j=1,n2
@@ -1676,7 +1665,7 @@ c
 c
 c***********************************************************************
 c                                                                      *
-c   ************** ENERC  ************************                     *
+c   ******* ENERC : compute energy spectrum (in a cylinder) *******    *
 c                                                                      *
 c***********************************************************************
       subroutine enerc(time)
@@ -3268,21 +3257,21 @@ c
      % vmax(2),imaxv(2),jmaxv(2),kmaxv(2),
      % vmax(3),imaxv(3),jmaxv(3),kmaxv(3),
      % cflm,qqmax,imxq,jmxq,kmxq,densm,denmax,denmin
-       open(32,file=filth,status='unknown')
+c      open(32,file=filth,status='unknown')
       write(32,159)ntime,time,
      % vmax(1),imaxv(1),jmaxv(1),kmaxv(1),
      % vmax(2),imaxv(2),jmaxv(2),kmaxv(2),
      % vmax(3),imaxv(3),jmaxv(3),kmaxv(3),
      % cflm,qqmax,imxq,jmxq,kmxq,densm,denmax,denmin
-       close(32)
+c      close(32)
   159 format(1x,i5,2x,e10.4,4x,/,4x,
      % 3(e9.3,1x,i3,1x,i3,1x,i3,1x),/,4x,e9.3,
      % 2x,e9.3,1x,3(i3,1x),3(e12.6,1x))
 c
-       open(97,file=filte,status='unknown',position='append')
+c      open(97,file=filte,status='unknown',position='append')
        write(97,546) time, densm, anusslow, anussupp
  546   format(4(1x,e14.6))
-       close(97)
+c      close(97)
        eene = 0.
        do k=2,n3m-1
         kp=kpv(k)
