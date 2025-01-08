@@ -34,7 +34,7 @@ OP_COMP += -mcmodel=large
 OP_COMP += -O3
 #----------------------------------------
 # DEBUG OPTIONS
-# OP_COMP += -Og -Wall -fbacktrace -g # -fsanitize=thread
+# OP_COMP += -ggdb -O0 -Wall -fbacktrace -ffpe-trap=invalid,zero,overflow # -fsanitize=thread
 #----------------------------------------
 BUINCLUDE = src/param.f
 OBJS = obj/bounn.o obj/boutn.o obj/bouhd.o obj/pressnu.o obj/tsch.o obj/spect.o obj/ffts.o obj/fishpack.o
