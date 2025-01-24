@@ -201,22 +201,26 @@ c
   711 format(3x,'check in cond : tprint =',f8.4,'  ntii =',i8,
      1       '  ntstf =',i8,2x,'tpin =',f8.4//)
       if(idtv.eq.1) then
-        write(6,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(1
-     %),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),imaxv(3),jma
-     %xv(3),kmaxv(3),dt,qmax,iqm,jqm,kqm,densm,densmax,densmin'
-        write(32,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(
-     %1),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),imaxv(3),jm
-     %axv(3),kmaxv(3),dt,qmax,iqm,jqm,kqm,densm,densmax,densmin'
+        write(6,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),
+     %  jmaxv(1),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),
+     %  imaxv(3),jmaxv(3),kmaxv(3),dt,qmax,iqm,jqm,kqm,densm,densmax,
+     %  densmin'
+        write(32,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),
+     %  jmaxv(1),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),
+     %  imaxv(3),jmaxv(3),kmaxv(3),dt,qmax,iqm,jqm,kqm,densm,densmax,
+     %  densmin'
 c       call outh(time,dt)
 c       if(iaxsy.ne.0) call enerc(time)
 c       if(nson.ne.0) call wson(time)
       else
-        write(6,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(1
-     %),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),imaxv(3),jma
-     %xv(3),kmaxv(3),cflm,qmax,iqm,jqm,kqm,densm,densmax,densmin'
-        write(32,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),jmaxv(
-     %1),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),imaxv(3),jm
-     %axv(3),kmaxv(3),cflm,qmax,iqm,jqm,kqm,densm,densmax,densmin'
+        write(6,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),
+     %  jmaxv(1),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),
+     %  imaxv(3),jmaxv(3),kmaxv(3),cflm,qmax,iqm,jqm,kqm,densm,densmax,
+     %  densmin'
+        write(32,*)'ntime,time,voamax,vormax,vozmax,vmax(1),imax(i),
+     %  jmaxv(1),kmaxv(1),vmax(2),imaxv(2),jmaxv(2),kmaxv(2),vmax(3),
+     %  imaxv(3),jmaxv(3),kmaxv(3),cflm,qmax,iqm,jqm,kqm,densm,densmax,
+     %  densmin'
         cflm=cflm*dt
 c       call outh(time,cflm)
 c       if(iaxsy.ne.0) call enerc(time)
@@ -228,7 +232,7 @@ c
 c
 c     init_time(2)=timef()
       write(6,*) '       Init Time = '
-     &             ,(init_time(2)-init_time(1))*0.001
+     %             ,(init_time(2)-init_time(1))*0.001
 c
 
 
@@ -305,7 +309,7 @@ c
 c
 c       iter_time(2)=timef()
 c       write(6,*) '  Iteration Time = '
-c    &             ,(iter_time(2)-iter_time(1))*0.001
+c    %             ,(iter_time(2)-iter_time(1))*0.001
 c
   350 continue
 c
@@ -343,7 +347,7 @@ c
 c
 c     iter_time(2)=timef()
       write(6,*) '  Iteration Time = '
-     &             ,(iter_time(2)-iter_time(1))*0.001
+     %             ,(iter_time(2)-iter_time(1))*0.001
 c
       return
       end
@@ -942,7 +946,7 @@ c
       ap2j(jc)=a22p
       am2j(jc)=a22m
       ac2j(jc)=-(a22*(rm(jc)**2/g2rm(jc)+rm(jm)**2/g2rm(jm))+2.)
-     &                   /rc(jc)**2
+     %                   /rc(jc)**2
   251 continue
 c
 c         1      d   sin phi  d  q_r

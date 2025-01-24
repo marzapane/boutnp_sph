@@ -56,7 +56,7 @@ c
 c
 c     timings
       real timef
-      real tot_time(2)		! total time
+      real tot_time(2)    ! total time
 c
 c
 c     tot_time(1)=timef()
@@ -824,7 +824,7 @@ c***********************************************************************
       subroutine inirea(ntii,time)
       include'param.f'
       character*70 filcnw
-      real appa
+c     real appa
 C     filcnw = './dati/continua.dat'
 c     filcnw = '/scratch/verzicco/barun/dati/continua.dat'
 C     open(13,file=filcnw,form='unformatted',status='unknown')
@@ -960,7 +960,7 @@ c***********************************************************************
       include'param.f'
       character*70 namfi3
       character*5 ipfi
-      dimension vx(m1,m2,m3),vy(m1,m2,m3),vz(m1,m2,m3)
+      real vx(m1,m2,m3),vy(m1,m2,m3),vz(m1,m2,m3)
 cccccccccccccccccccccc
       go to 3476
 c     Spherical components
@@ -1588,7 +1588,7 @@ c20   read(99,100,end=10) aa,aa,aa,aa,aa,aa,aa,aa,aa,aa,aa
 c     go to 20
 c10   continue
 c     backspace(99)
- 30     write(99,100)
+ 30   write(99,100)
      %   time,q1(ir,jr,kr),q2sur,q3(ir,jr,kr),
      %   pr(ir,jr,kr),delq3,voraz,vorr,vorz
       close(99)
@@ -1775,7 +1775,8 @@ c***********************************************************************
         do 116 k=1,n3m
           do 116 j=1,n2m
             iadd=i+(j-1)*n1m+(k-1)*n1m*n2m
-            ener(i)=ener(i)+ffat(i)*rhs(iadd )*rm(j)*g2rm(j)*g3rm(k)*dvol
+            ener(i)=ener(i)
+     %             +ffat(i)*rhs(iadd)*rm(j)*g2rm(j)*g3rm(k)*dvol
  116  continue
       open(39,file=filen,status='unknown')
       write(39,546) time,(ener(i),i=nini,nfin,nstri)
@@ -2136,7 +2137,7 @@ c    %   ((((1.),
 
 ************************************************************************
 
- 7766 continue
+c7766 continue
 
 c     Cartesian components
       do kc=2,n3m

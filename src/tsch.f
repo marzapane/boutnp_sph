@@ -63,15 +63,16 @@ c
       subroutine tschem(time)
       include'param.f'
 c 
-      REAL etime_,t(2),timef
-      REAL start,finish
-      REAL q1s(m1,m3),q3s(m1,m3) 
+c     REAL etime_,t(2),timef
+c     REAL start,finish
+      integer start,finish,rate
+c     REAL q1s(m1,m3),q3s(m1,m3)
 c
 c   TIME INTEGRATION : implicit viscous, 3rd order RK (Adams Bashfort)  
 c                                                                       
 c       ttt_00 = etime_(t)
 c       et_00  = timef()
-      call cpu_time(start)
+      call system_clock(start, rate)
       do 2000 ns=1,nsst                                                 
 c       ttt_in = etime_(t)
         al=alm(ns)
@@ -83,11 +84,11 @@ c       timhd0 = etime_(t)
         call hdnl1                    !! NON LINEAR TERMS
         call hdnl2                 !!  "    "      "
         call hdnl3                          !!  "    "      "
-        call hdnlro                          !!  "    "      "
+c       call hdnlro                          !!  "    "      "
         call invtr1                        !! DQ1HAT=Q1HAT-Q1(N)
         call invtr2                      !! DQ2HAT=Q2HAT-Q2(N)
         call invtr3                      !! DQ3HAT=Q3HAT-Q3(N)
-        call invtrro                      !! DQ3HAT=Q3HAT-Q3(N)
+c       call invtrro                      !! 
 c
 c       tiphc0  = etime_(t)
         call divg           
@@ -107,9 +108,11 @@ c       write(6,*) ' Total_Time = ',ttt_fi-ttt_in
  2000 continue                                                          
 c       ttt_11 = etime_(t)
 c       et_11 = timef()
+        call system_clock(finish, rate)
         write(6,*) ' ---------------------------------------- '
         write(6,*) ' T = ',time,' NTIME = ',ntime,' DT = ',dt
-        write(6,*) '      Total_Iter_Time = ',finish-start
+c       write(6,*) '      Total_Iter_Time = ',finish-start
+        write(6,*) '      Total_Iter_Time = ',(finish-start)/rate
 c       write(6,*) ' Total_Elap_Time = ',(et_11-et_00)*0.001
       return                                                            
       end                                                               

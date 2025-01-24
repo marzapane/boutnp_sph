@@ -36,7 +36,7 @@ c
       subroutine phcalc
       include'param.f'
       dimension yfisl(m3,m2),wl1(m3*m2),wl2(m3*m2)
-      dimension amjl(m2),acjl(m2),apjl(m2)
+c     dimension amjl(m2),acjl(m2),apjl(m2)
       dimension amkl(m3),ackl(m3),apkl(m3)
       my=m3
 c
@@ -248,7 +248,7 @@ c     enddo
       if(mw.gt.(m3*m2)) then
         write(6,*) ' WARNING THE ARRAY W HAS INSUFFICIENT '
         write(6,*) ' DIMENSIONS : mw = ',mw
-        pause
+c       pause
       end if
      
       np=1

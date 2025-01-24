@@ -8,8 +8,7 @@ c***********************************************************************
       dimension spec(m3,m1),rwc(m2),rwm(m2)
       real      rtr,rsc,rsm,mode(m3,m1)
       real   xxr(m1m+2,m3m),wwork(m1m+1,m3m)
-      integer pos
-      character*30 filsp,buffer
+      character*30 filsp
       character*14 filth,filte,filba,filen,filso,filve,filnu,filbaper
       common/names/filth,filte,filba,filen,filso,filve,filnu,filbaper
 c
@@ -78,7 +77,7 @@ c
             is=i+1
             xxr(is,k) = xxr(is,k) + q1(i,j,k)*rwm(j)
   22      continue
-          xxr(n1md,k) = xxr(nimd,k) + q1(1,j,k)*rwm(j)
+          xxr(n1md,k) = xxr(n1md,k) + q1(1,j,k)*rwm(j)
   12    continue
   2   continue
       do k = 1, n3m

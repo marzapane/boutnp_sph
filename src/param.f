@@ -38,7 +38,7 @@ c     parameter (m1=385,m2=385,m3=385,ndd=2,ndv=3)
       real       time
       real       epsil,re
       real     xr(m1m+2,m2m),work(m1,m2m)
-      real     trigx1(3*m1/2+1),ifx1(13),ak1(m1+1),ap(m1+1)
+      real     trigx1(3*m1m/2+1),ifx1(13),ak1(m1+1),ap(m1+1)
       real     amphj(m2),acphj(m2),apphj(m2)
       real     amphk(m3),acphk(m1+1,m3),apphk(m3),acphkk(m3)
       real     yfis(m3,m2),w(m2*m3)
