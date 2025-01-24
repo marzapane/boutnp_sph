@@ -2,6 +2,7 @@ c     parameter (m1=97,m2=101,m3=1025,ndd=2,ndv=3)
 c     parameter (m1=257,m2=193,m3=1537,ndd=2,ndv=3)
 c     parameter (m1=193,m2=129,m3=513,ndd=2,ndv=3)
 c     parameter (m1=385,m2=257,m3=1025,ndd=2,ndv=3)
+c     parameter (m1=1025,m2=129,m3=513,ndd=2,ndv=3)   ! huge
 c     parameter (m1=769,m2=81,m3=581,ndd=2,ndv=3)     ! bigger
       parameter (m1=513,m2=65,m3=513,ndd=2,ndv=3)     ! big
 c     parameter (m1=257,m2=33,m3=257,ndd=2,ndv=3)     ! small
