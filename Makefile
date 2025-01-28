@@ -13,7 +13,7 @@ ifeq ($(COMP),GNU)
 	OP_COMP = -fdefault-real-8
 	OP_COMP += -mcmodel=large -fmax-stack-var-size=1073741824
 else
-	FC = ifort
+	FC = ifx
 	OP_COMP = -r8
 endif
 #----------------------------------------
