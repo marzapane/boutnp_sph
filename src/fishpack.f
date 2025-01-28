@@ -1030,7 +1030,7 @@ c
      1                nm         ,ncmplx     ,ik
       external        psgf       ,ppspf      ,ppsgf
 cRV
-      cbp(1)=complex(bpc,0.)
+      cbp(1)=cmplx(bpc,0.)
 cRV
       scnv = sqrt(cnv)
       iz = n
