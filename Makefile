@@ -13,7 +13,7 @@ ifeq ($(COMP),GNU)
 	OP_COMP = -fdefault-real-8
 	OP_COMP += -mcmodel=large -fmax-stack-var-size=1073741824
 else
-	FC = ifort
+	FC = ifx
 	OP_COMP = -r8
 endif
 #----------------------------------------
@@ -31,7 +31,7 @@ else
 		OP_COMP += -O3
 	else
 		FC += -parallel -qopenmp
-		OP_COMP += -ip
+		OP_COMP += -ipo
 		OP_COMP += -axCORE-AVX2
 		OP_COMP += -mfma
 	endif
