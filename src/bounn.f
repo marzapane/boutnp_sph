@@ -133,17 +133,17 @@ c
      % 'Cilindro a rapporto d''aspetto:  D/H = ',f4.2)
       write(6,202) ray,pra
       write(32,202) ray,pra
-  202 format(/,5x,'Parametri: ',' Ray=',e9.3,' Pra= ',e9.3)
+  202 format(/,5x,'Parametri: ',' Ray=',e10.3,' Pra= ',e10.3)
       if(idtv.eq.1) then
          write(6,204) cflmax
          write(32,204) cflmax
   204 format(/,5x,'calcolo effettuato con dt variabile e cfl= ',
-     % e10.4,/ )
+     % e11.4,/ )
       else
          write(6,205) dtmax,cfllim
          write(32,205) dtmax,cfllim
-  205 format(/,5x,'calcolo effettuato con dt= ',e10.4,' e cflmax=
-     %  ',e10.4,/ )
+  205 format(/,5x,'calcolo effettuato con dt= ',e11.4,' e cflmax=
+     %  ',e11.4,/ )
       endif
 c
 c     assign coefficients for time marching schemes
@@ -3265,9 +3265,9 @@ c      open(32,file=filth,status='unknown')
      % vmax(3),imaxv(3),jmaxv(3),kmaxv(3),
      % cflm,qqmax,imxq,jmxq,kmxq,densm,denmax,denmin
 c      close(32)
-  159 format(1x,i5,2x,e10.4,4x,/,4x,
-     % 3(e9.3,1x,i3,1x,i3,1x,i3,1x),/,4x,e9.3,
-     % 2x,e9.3,1x,3(i3,1x),3(e12.6,1x))
+  159 format(1x,i5,2x,e11.4,4x,/,4x,
+     % 3(e10.3,1x,i3,1x,i3,1x,i3,1x),/,4x,e10.3,
+     % 2x,e10.3,1x,3(i3,1x),3(e13.6,1x))
 c
 c      open(97,file=filte,status='unknown',position='append')
        write(97,546) time, densm, anusslow, anussupp

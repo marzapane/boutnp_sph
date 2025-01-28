@@ -84,7 +84,7 @@ c
      % ,i3/)
       write(6,755) dx1,dx2,dx3,dt,ntst
       write(32,755) dx1,dx2,dx3,dt,ntst
-  755 format(/,2x,'dx1=',e9.3,' dx2=',e9.3,' dx3=',e9.3,'  dt=',e9.3,
+  755 format(/,2x,'dx1=',e10.3,' dx2=',e10.3,' dx3=',e10.3,'  dt=',e10.3,
      % '  ntst=',i5,/)
       time=0.
       ntii=0
