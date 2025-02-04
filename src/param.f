@@ -39,7 +39,8 @@ c     parameter (m1=385,m2=385,m3=385,ndd=2,ndv=3)
       real       time
       real       epsil,re
       real     xr(m1m+2,m2m),work(m1,m2m)
-      real     trigx1(3*m1m/2+1),ifx1(13),ak1(m1+1),ap(m1+1)
+      real     trigx1(3*m1m/2+1),trigxv(3*m1m/2+1),ak1(m1+1),ap(m1+1)
+      integer  ifx1(13),ifxv(13)
       real     amphj(m2),acphj(m2),apphj(m2)
       real     amphk(m3),acphk(m1+1,m3),apphk(m3),acphkk(m3)
       real     yfis(m3,m2),w(m2*m3)
@@ -49,7 +50,6 @@ c     parameter (m1=385,m2=385,m3=385,ndd=2,ndv=3)
       real     g3rc(m3),g3rm(m3),str3
 c     real     qqmax,qqtot
       real     rmed31,istr3,etdp3,strb3
-      real     trigxv(3*m1m/2+1),ifxv(13)
       real     uaxN(3,m2),uaxS(3,m2),qaxN(3,m1,m2),qaxS(3,m1,m2)
       common/uqax/     uaxN,uaxS,qaxN,qaxS
       common /avesta/ istat,iresta,timeav,timerms
