@@ -11,16 +11,17 @@ OPTM = DEBUG
 ifeq ($(COMP),GNU)
 	FC = gfortran
 	OP_COMP = -fdefault-real-8
-	OP_COMP += -mcmodel=large -fmax-stack-var-size=1073741824
+	OP_COMP += -mcmodel=large -Mlarge_arrays
 else
 	FC = ifx
 	OP_COMP = -r8
+	OP_COMP = -mcmodel=large -heap-arrays
 endif
 #----------------------------------------
 ifeq ($(OPTM),DEBUG)
 # DEBUG OPTIONS
 	ifeq ($(COMP),GNU)
-		OP_COMP += -ggdb -O0 -Wall -fbacktrace -ffpe-trap=invalid,zero #,overflow,underflow
+		OP_COMP += -ggdb -O0 -Wall -fbacktrace -recursive -ffpe-trap=invalid,zero #,overflow,underflow
 	else
 		OP_COMP = -g -O0 -traceback -warn all,extra -check all -check pointers -init=snan -fpe0
 	endif
@@ -31,8 +32,8 @@ else
 		OP_COMP += -O3
 	else
 		FC += -parallel -qopenmp
-		OP_COMP += -ipo
-		OP_COMP += -axCORE-AVX2
+		OP_COMP += -fast
+		OP_COMP += -xHost
 		OP_COMP += -mfma
 	endif
 endif
