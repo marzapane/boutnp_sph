@@ -70,7 +70,7 @@ c     real     qqmax,qqtot
       common /enerw/  nini,nfin,nstri
       common /fftcm1/ ifx1,ifx3(13)
       common /fftcm3/ trigx1,trigx3(m32),dism
-      common /fftvel/ ifxv,trigxv
+      common /fftvel/ trigxv,ifxv
       common /force/  ifugo,icorio,ibuo,isca,ivisc
       common /favis/  fvisc1(m2,m3),fvisc2(m2,m3),fvisc3(m2,m3)
      %               ,fvisc(m2,m3)
