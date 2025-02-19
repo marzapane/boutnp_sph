@@ -1,3 +1,4 @@
 /boutnp_sph
 /dati
 /obj/*.o
+src/read_fortran_binary.py
