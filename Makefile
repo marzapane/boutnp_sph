@@ -11,7 +11,7 @@ OPTM = DEBUG
 ifeq ($(COMP),GNU)
 	FC = gfortran
 	OP_COMP = -fdefault-real-8
-	OP_COMP += -mcmodel=large -Mlarge_arrays
+	OP_COMP += -mcmodel=large
 else
 	FC = ifx
 	OP_COMP = -r8
@@ -21,7 +21,7 @@ endif
 ifeq ($(OPTM),DEBUG)
 # DEBUG OPTIONS
 	ifeq ($(COMP),GNU)
-		OP_COMP += -ggdb -O0 -Wall -fbacktrace -recursive -ffpe-trap=invalid,zero #,overflow,underflow
+		OP_COMP += -ggdb -O0 -Wall -fbacktrace -frecursive -ffpe-trap=invalid,zero #,overflow,underflow
 	else
 		OP_COMP = -g -O0 -traceback -warn all,extra -check all -check pointers -init=snan -fpe0
 	endif
