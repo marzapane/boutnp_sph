@@ -51,7 +51,10 @@ c     parameter (m1=385,m2=385,m3=385,ndd=2,ndv=3)
 c     real     qqmax,qqtot
       real     rmed31,istr3,etdp3,strb3
       real     uaxN(3,m2),uaxS(3,m2),qaxN(3,m1,m2),qaxS(3,m1,m2)
-      common/uqax/     uaxN,uaxS,qaxN,qaxS
+      real     mode(m3,m1),spec(m3,m1)
+      integer  nspec
+      common /specf/  mode,spec,nspec
+      common /uqax/   uaxN,uaxS,qaxN,qaxS
       common /avesta/ istat,iresta,timeav,timerms
       common /axsym/  iaxsy
       common /cft/    nx3fft
@@ -59,13 +62,13 @@ c     real     qqmax,qqtot
       common /corrt/  thetac(m1),ragc(m2),thetam(m1),ragm(m2)
       common /ctrdph/ amph(m2),acph(m2),apph(m2)
       common /d1/     re
-      common /conv/     ray,pra,tfin,eps
+      common /conv/   ray,pra,tfin,eps
       common /d13/    alx3
       common /d2/     nstop,ntst,npstf,ireset,ntime
       common /dd2/    tprint,tpin,tmax
       common /dim/    n1,n1m,n2,n2m,n3,n3m
       common /dimens/ alx3d
-      common /diverg/    qcap
+      common /diverg/ qcap
       common /dphc/   dph
       common /enerw/  nini,nfin,nstri
       common /fftcm1/ ifx1,ifx3(13)

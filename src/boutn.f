@@ -192,6 +192,9 @@ c       call vmaxv
 c       call outh(time,dt)
 c       if(iaxsy.ne.0) call enerc(time)
 c       if(nson.ne.0) call wson(time)
+        call init_spec
+        write(6,*)' spectrum computation initiated'
+        write(32,*)' spectrum computation initiated'
       endif
 c
       ntstf=ntii+ntst
@@ -290,6 +293,7 @@ CRV       if(nson.ne.0) call wson(time)
 CC        if(iaxsy.ne.0) call enerc(time)
 CRV       if(nson.ne.0) call wson(time)
         endif
+        if(nread.eq.1) call spect
         if(dmax.gt.resid) go to 169
 c
   305   continue
@@ -303,7 +307,7 @@ c
         endif
         if(mod(time,tprint).lt.dt) then
           call outpf(time)
-          call spect(time)
+          if(nread.eq.1) call print_spec(time)
         endif
         if(time.gt.tmax) go to 167
 c

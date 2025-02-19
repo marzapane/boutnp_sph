@@ -3,17 +3,31 @@ c                                                                      *
 c            ************** SPECT  ************************            *
 c                                                                      *
 c***********************************************************************
-      subroutine spect(time)
+      subroutine init_spec
       include 'param.f'
-      dimension spec(m3,m1),rwc(m2),rwm(m2)
-      real      rtr,rsc,rsm,mode(m3,m1)
-      real   xxr(m1m+2,m3m),wwork(m1m+1,m3m)
-      character*30 filsp
-      character*14 filth,filte,filba,filen,filso,filve,filnu,filbaper
-      common/names/filth,filte,filba,filen,filso,filve,filnu,filbaper
+      integer n1mh
+
+      call fftv
+      n1mh=n1m/2+1
+
+      do i=1,n1mh
+        do k=1,n3m
+          mode(k,i)=real(i-1)/sin(zm(k))
+        end do
+      end do
+      nspec=0
+      spec=0.0d0
+      end subroutine init_spec
 c
 c***********************************************************************
 c
+      subroutine spect
+      include 'param.f'
+      dimension rwc(m2),rwm(m2)
+      real      rtr,rsc,rsm
+      real   xxr(m1m+2,m3m),wwork(m1m+1,m3m)
+      integer n1mh
+
       call fftv
       dvol = 1./(dx2 * dx3)
       pi = 2. * asin (1.)
@@ -59,8 +73,9 @@ c
         ip=2*i
         id=2*i-1
         do 41 k=1,n3m
-          spec(k,i) = real( cmplx(xxr(id,k),xxr(ip,k))
-     1               *conjg(cmplx(xxr(id,k),xxr(ip,k))) )
+          spec(k,i) = spec(k,i)
+     1              + real( cmplx(xxr(id,k),xxr(ip,k))
+     1              * conjg(cmplx(xxr(id,k),xxr(ip,k))) )
   41    continue
   31  continue
 c
@@ -135,16 +150,20 @@ c
      1              * conjg(cmplx(xxr(id,k),xxr(ip,k))) )
   43    continue
   33  continue
+      
+      nspec = nspec + 1
+
+      end subroutine spect
 c
 c***********************************************************************
-      do i=1,n1mh
-        do k=1,n3m
-          mode(k,i) = real(i-1)/sin(zm(k))
-        end do
-      end do
-c***********************************************************************
 c
-      write(filsp,'(A6,I8.8,A4)') 'spctr_', ntime, '.bin'
+      subroutine print_spec(time)
+      include 'param.f'
+      character*30 filsp
+      integer n1mh
+
+      n1mh=n1m/2+1
+      write(filsp,'(A6,I5.5,A4)') 'spctr_', 10.*time, '.bin'
       open(39,file=filsp,form='unformatted',status='unknown')
       write(39) n3m, n1mh
       write(39) (((mode(k,i)),k=1,n3m),i=1,n1mh)
@@ -152,4 +171,4 @@ c
       write(39) time
       close(39)
       return
-      end
+      end subroutine print_spec
