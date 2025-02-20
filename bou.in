@@ -26,5 +26,5 @@ NSON (numero di sonde (max. 400))
 4
 ICOND (3 null, 4 homog. vel.)
 3
-IFORC (0 no-forcing, 1 random forc.)
-1
+IFORC (0 no-forc, 1 random forc)    ISPEC
+1                                   0

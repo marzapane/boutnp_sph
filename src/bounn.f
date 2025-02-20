@@ -91,7 +91,7 @@ c
         read(15,301) dummy
         read(15,*) indexForInitial
         read(15,301) dummy
-        read(15,*) iforc
+        read(15,*) iforc,ispec
 301     format(a4)
       close(15)
       r0 = rext

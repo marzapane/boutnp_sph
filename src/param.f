@@ -52,8 +52,8 @@ c     real     qqmax,qqtot
       real     rmed31,istr3,etdp3,strb3
       real     uaxN(3,m2),uaxS(3,m2),qaxN(3,m1,m2),qaxS(3,m1,m2)
       real     mode(m3,m1),spec(m3,m1)
-      integer  nspec
-      common /specf/  mode,spec,nspec
+      integer  nspec,ispec
+      common /specf/  mode,spec,nspec,ispec
       common /uqax/   uaxN,uaxS,qaxN,qaxS
       common /avesta/ istat,iresta,timeav,timerms
       common /axsym/  iaxsy
