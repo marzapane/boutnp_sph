@@ -163,7 +163,7 @@ c
       integer n1mh
 
       n1mh=n1m/2+1
-      write(filsp,'(A6,I5.5,A4)') 'spctr_', 10.*time, '.bin'
+      write(filsp,'(A6,I5.5,A4)') 'spctr_', int(10.*time), '.bin'
       open(39,file=filsp,form='unformatted',status='unknown')
       write(39) n3m, n1mh
       write(39) (((mode(k,i)),k=1,n3m),i=1,n1mh)
