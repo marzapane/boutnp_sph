@@ -167,7 +167,7 @@ c
       open(39,file=filsp,form='unformatted',status='unknown')
       write(39) n3m, n1mh
       write(39) (((mode(k,i)),k=1,n3m),i=1,n1mh)
-      write(39) (((spec(k,i)),k=1,n3m),i=1,n1mh)
+      write(39) (((spec(k,i)/nspec),k=1,n3m),i=1,n1mh)
       write(39) time
       close(39)
       return
