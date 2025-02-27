@@ -24,7 +24,7 @@ c
       subroutine spect
       include 'param.f'
       dimension rwc(m2),rwm(m2)
-      real      rtr,rsc,rsm
+      real      rtr,rsc,rsm,pi
       real   xxr(m1m+2,m3m),wwork(m1m+1,m3m)
       integer n1mh
 
