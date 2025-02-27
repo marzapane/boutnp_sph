@@ -81,15 +81,23 @@ c***********************************************************************
 c
 c     h term for the q1 momentum equation at i,j+1/2,k+1/2
 c
+      integer om_th,om_z
+      real ph_th,ph_z,forc_mod,rand,pi
+      pi = 2. * asin (1.)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
       call random_number(rand)
       om_th = nint(rand * 16)
       call random_number(rand)
-      om_ph = nint(rand * 16)
+      om_z = nint(rand * 8)*2
+      call random_number(rand)
+      ph_th = rand * 2*pi
+      call random_number(rand)
+      ph_z = rand * 2*pi
       call random_number(rand)
       forc_mod = rand
-      r_max = rm(n2m)
+      r_max = rc(n2)
+      r_min = rc(1)
 
       ivisc1=1
       small = 1.e-10
@@ -101,14 +109,15 @@ c     definition of the random coeff. for the forcing
 !$OMP$ SHARED(usrm,usrc,usinpm,usinpc,sinpm,sinpc,cospm)
 !$OMP$ SHARED(utanpm,qaxN,qaxS)
 !$OMP$ SHARED(dq,q1,q2,q3,dens)
-!$OMP$ SHARED(dx1,dx2,dx3,udx3m,udx1vis1,udx1vis3)
+!$OMP$ SHARED(dx1,dx2,dx3,udx3m,udx1vis1,udx1vis3,pi)
 !$OMP$ SHARED(fvisc,ivisc1,usros,icorio,ibuo,iforc)
-!$OMP$ SHARED(forc_mod,om_th,om_ph,r_max)
+!$OMP$ SHARED(forc_mod,om_th,om_z,ph_th,ph_z,r_min,r_max)
 !$OMP$ PRIVATE(kc,kmm,kpp,kp,jc,jmm,jpp,jp,jm,ic,ip,im)
 !$OMP$ PRIVATE(udx1nl,fact2,fact3,insy,insym,knsy)
 !$OMP$ PRIVATE(ksm,ksy,ism,ismm,q3sy,q3sym,q3s,q3sm)
 !$OMP$ PRIVATE(q2e,q2w,d11q2e,q3e,q3w,d11q3e)
-!$OMP$ PRIVATE(h11,h12,h13,h12n,h13n,hq1,coriol,densit,forc)
+!$OMP$ PRIVATE(h11,h12,h13,h12n,h13n,hq1,coriol,densit)
+!$OMP$ PRIVATE(forc,om_tape)
       do 10 kc=1,n3m
       kmm=kmv(kc)
       kpp=kpv(kc)
@@ -258,8 +267,11 @@ c
 c
 c     add the randomforcing term
 c
-      forc = forc_mod * sin(om_th*thetac(ic))
-     %       * rm(jc)/r_max * cos(om_ph * zm(kc))
+      om_tape = nint(om_th*sin(zm(kc)))
+      forc = forc_mod
+     %      * sin(om_tape * thetac(ic) + ph_th)
+     %      * (rm(jc)-r_min)/(r_max-r_min)
+     %      * cos(om_z * zm(kc) + ph_z)
 
       dq(ic,jc,kc)=d11q2e+d11q3e-hq1+coriol
      %             -densit*(sin(thetac(ic))) !gravita'' diretta lungo x
@@ -278,15 +290,23 @@ c***********************************************************************
 c
 c     h term for the q2 momentum equation at i+1/2,j,k+1/2
 c
+      integer om_th,om_z
+      real ph_th,ph_z,forc_mod,rand,pi
+      pi = 2. * asin (1.)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
       call random_number(rand)
       om_th = nint(rand * 16)
       call random_number(rand)
-      om_ph = nint(rand * 16)
+      om_z = nint(rand * 8)*2
+      call random_number(rand)
+      ph_th = rand * 2*pi
+      call random_number(rand)
+      ph_z = rand * 2*pi
       call random_number(rand)
       forc_mod = rand
-      r_max = rm(n2m)
+      r_max = rc(n2)
+      r_min = rc(1)
 
       ivisc2=1
       icon = 0
@@ -298,14 +318,15 @@ c     definition of the random coeff. for the forcing
 !$OMP$ SHARED(usrc,usinpm,usinpc,sinpm,sinpc)
 !$OMP$ SHARED(qaxN,qaxS,ren)
 !$OMP$ SHARED(dph,q1,q2,q3,dens)
-!$OMP$ SHARED(dx1,dx3,udx2c,udx3m)
+!$OMP$ SHARED(dx1,dx3,udx2c,udx3m,pi)
 !$OMP$ SHARED(fvisc,ivisc2,usros,icorio,ibuo,iforc)
-!$OMP$ SHARED(forc_mod,om_th,om_ph,r_max)
+!$OMP$ SHARED(forc_mod,om_th,om_z,ph_th,ph_z,r_min,r_max)
 !$OMP$ PRIVATE(kc,kmm,kpp,kp,jc,jp,jm,ic,imm,ipp)
 !$OMP$ PRIVATE(udx1,fact,fact2,fact3,insy,knsy)
 !$OMP$ PRIVATE(ksm,ism,q3sy,q3sym,q3s,q3n)
 !$OMP$ PRIVATE(q1e,q1w,d11q1v,d33q3v)
-!$OMP$ PRIVATE(h21,h22,h23,h11n,h33n,hq2,coriol,densit,forc)
+!$OMP$ PRIVATE(h21,h22,h23,h11n,h33n,hq2,coriol,densit)
+!$OMP$ PRIVATE(forc,om_tape)
       do 20 kc=1,n3m
       kmm=kmv(kc)
       kpp=kpv(kc)
@@ -427,8 +448,11 @@ c
 c
 c     add the randomforcing term
 c
-      forc = forc_mod * sin(om_th*thetac(ic))
-     %       * rm(jc)/r_max * cos(om_ph * zm(kc))
+      om_tape = nint(om_th*sin(zm(kc)))
+      forc = forc_mod * rc(jc)**2
+     %      * sin(om_tape * thetam(ic) + ph_th)
+     %      * (rc(jc)-r_min)/(r_max-r_min)
+     %      * cos(om_z * zm(kc) + ph_z)
 
       dph(ic,jc,kc)=d11q1v+d33q3v-hq2+coriol
      %               +densit*(sinpm(kc)*cos(thetam(ic))) !gravita'' allimeata in x
@@ -450,15 +474,23 @@ c***********************************************************************
 c
 c     h term for the q3 momentum equation at i+1/2,j+1/2,k
 c
+      integer om_th,om_z
+      real ph_th,ph_z,forc_mod,rand,pi
+      pi = 2. * asin (1.)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
       call random_number(rand)
       om_th = nint(rand * 16)
       call random_number(rand)
-      om_ph = nint(rand * 16)
+      om_z = nint(rand * 8)*2
+      call random_number(rand)
+      ph_th = rand * 2*pi
+      call random_number(rand)
+      ph_z = rand * 2*pi
       call random_number(rand)
       forc_mod = rand
-      r_max = rm(n2m)
+      r_max = rc(n2)
+      r_min = rc(1)
 
       ivisc3 = 1
       small = 1.e-10
@@ -471,14 +503,14 @@ c     definition of the random coeff. for the forcing
 !$OMP$ SHARED(usrm,usrmq,usrc,usinpc,sinpc,cospc)
 !$OMP$ SHARED(utanpc,qaxN,qaxS,ren)
 !$OMP$ SHARED(qcap,q1,q2,q3,dens)
-!$OMP$ SHARED(dx1,dx2,dx3)
+!$OMP$ SHARED(dx1,dx2,dx3,pi)
 !$OMP$ SHARED(fvisc,ivisc3,usros,icorio,ibuo,iforc)
-!$OMP$ SHARED(forc_mod,om_th,om_ph,r_max)
-
+!$OMP$ SHARED(forc_mod,om_th,om_z,ph_th,ph_z,r_min,r_max)
 !$OMP$ PRIVATE(kc,km,kp,jc,jmm,jpp,jp,ic,ipp,imm)
 !$OMP$ PRIVATE(sudx1vis2,sudx1vis3,udx1,fact2,fact3,insy)
 !$OMP$ PRIVATE(q3km,q3kp,q1e,q1w,d11q1v,q2s,q2n,d11q2v)
-!$OMP$ PRIVATE(h31,h32,h33,h23n,h11n,hq3,coriol,densit,forc)
+!$OMP$ PRIVATE(h31,h32,h33,h23n,h11n,hq3,coriol,densit)
+!$OMP$ PRIVATE(forc,om_tape)
       do 30 kc=2,n3m
 c     km=kmv(kc)
       km=kc-1
@@ -608,9 +640,11 @@ c
 c
 c     add the randomforcing term
 c
-      forc = forc_mod * sin(om_th*thetac(ic))
-     %       * rm(jc)/r_max * cos(om_ph * zm(kc))
- 
+      om_tape = nint(om_th*sin(zz(kc)))
+      forc = forc_mod * sin(zz(kc))
+     %      * sin(om_tape * thetam(ic) + ph_th)
+     %      * (rm(jc)-r_min)/(r_max-r_min)
+     %      * cos(om_z * zz(kc) + ph_z) 
 
       qcap(ic,jc,kc)=d11q1v+d11q2v-hq3+coriol
      %               +densit*(+cospc(kc)*cos(thetam(ic))) !gravita'' allimeata in x
