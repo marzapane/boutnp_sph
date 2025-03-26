@@ -84,8 +84,8 @@ c
      % ,i3/)
       write(6,755) dx1,dx2,dx3,dt,ntst
       write(32,755) dx1,dx2,dx3,dt,ntst
-  755 format(/,2x,'dx1=',e10.3,' dx2=',e10.3,' dx3=',e10.3,'  dt=',e10.3,
-     % '  ntst=',i5,/)
+  755 format(/,2x,'dx1=',e10.3,' dx2=',e10.3,' dx3=',e10.3,
+     % '  dt=',e10.3,'  ntst=',i5,/)
       time=0.
       ntii=0
       if(nson.ne.0) then
@@ -103,7 +103,7 @@ c
   923 format(2x,'sonda n= ',i3,' : th=',f8.2,', r=',f8.2,', x=',f8.2)
       write(6,*)
       write(32,*)
-      write(6,*) ' AAA '
+c     write(6,*) ' AAA '
 C    PRINT 3D coordinate file
       write(*,*)'-------- Grid file -----------'
       do kc=1,n3
@@ -136,11 +136,12 @@ c           if(ii.eq.n1) ic=1
      %   ((((zzz(i,j,k)),
      %   i=1,n1),j=1,n2),k=1,n3)
       close(99)
+
 c
 c   read or create initial fields
 c
       call phini
-      write(6,*) ' AAA2 '
+c     write(6,*) ' AAA2 '
 c
       do 22 l=1,ndv
         vmax(l)=0.
@@ -174,9 +175,9 @@ c index = 4 -> homogeneous velocity
         elseif ( indexForInitial .eq. 4 ) then
           call inqHR
         end if
-          write(6,*) ' AAA3 '
+c         write(6,*) ' AAA3 '
         call divgck(dmax,dtot)
-          write(6,*) ' AAA4 '
+c         write(6,*) ' AAA4 '
         write(6,*)' initial divg dmax,dtot  ',dmax,dtot
         write(32,*)' initial divg dmax,dtot  ',dmax,dtot
         call outpf(time)
@@ -234,7 +235,7 @@ c       if(nson.ne.0) call wson(time)
       endif
 c
       call coetar
-      write(6,*) ' AAA5 '
+c     write(6,*) ' AAA5 '
 c
 c     init_time(2)=timef()
       write(6,*) '       Init Time = '
