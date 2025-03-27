@@ -2437,8 +2437,11 @@ C           south pole
           end do
         end do
 
-
-       open(38,file='enerv.out',status='unknown',position='append')
+       if(nread.eq.0) then
+         open(38,file='enerv.out',status='replace')
+       else
+         open(38,file='enerv.out',status='old',position='append')
+       end if
        write(38,540) time, eene
        write(*,*) ' T = ',time,' E = ', eene
 c      pause
