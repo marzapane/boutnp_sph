@@ -779,6 +779,9 @@ C    %          (((q2(i,j,k),i=1,n1),j=1,n2),k=1,n3),
 C    %          (((q3(i,j,k),i=1,n1),j=1,n2),k=1,n3)
 c    %         ,(((pr(i,j,k),i=1,n1),j=1,n2),k=1,n3)
 C     close(13)
+      write(6,738) dt
+      write(32,738) dt
+  738 format(10x,'Overwriting continua.dat with up-to-date fields',e14.7)
       filcnw = './dati/continua.dat'
 c     filcnw = '/scratch/verzicco/barun/dati/continua.dat'
       open(13,file=filcnw,form='unformatted',status='unknown')
