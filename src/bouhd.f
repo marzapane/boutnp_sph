@@ -95,7 +95,7 @@ c     definition of the random coeff. for the forcing
       call random_number(rand)
       ph_z = rand * 2*pi
       call random_number(rand)
-      forc_mod = rand
+      forc_mod = forc_scale * rand
       r_max = rc(n2)
       r_min = rc(1)
 
@@ -264,18 +264,21 @@ c
 c  add the buoiancy term  
 c
       densit = 0.5*(dens(ic,jc,kc)+dens(im,jc,kc))*float(ibuo)
-c
-c     add the randomforcing term
-c
-      om_tape = nint(om_th*sin(zm(kc)))
-      forc = forc_mod
-     %      * sin(om_tape * thetac(ic) + ph_th)
-     %      * (rm(jc)-r_min)/(r_max-r_min)
-     %      * cos(om_z * zm(kc) + ph_z)
 
       dq(ic,jc,kc)=d11q2e+d11q3e-hq1+coriol
-     %             -densit*(sin(thetac(ic))) !gravita'' diretta lungo x
-     %             +float(iforc)*forc        !simple oscillating random forcing
+     %             -densit*(sin(thetac(ic))) !gravita'' diretta lungo x 
+c
+c     add the random forcing term
+c
+      if(iforc.eq.1) then
+        om_tape = nint(om_th*sin(zm(kc)))
+        forc = forc_mod
+     %        * sin(om_tape * thetac(ic) + ph_th)
+     %        * (rm(jc)-r_min)/(r_max-r_min)
+     %        * cos(om_z * zm(kc) + ph_z)
+        dq(ic,jc,kc) = dq(ic,jc,kc) + forc !simple oscillating random forcing
+      end if
+
    10 continue
 !$OMP  END PARALLEL DO
 c
@@ -304,7 +307,7 @@ c     definition of the random coeff. for the forcing
       call random_number(rand)
       ph_z = rand * 2*pi
       call random_number(rand)
-      forc_mod = rand
+      forc_mod = forc_scale * rand
       r_max = rc(n2)
       r_min = rc(1)
 
@@ -445,23 +448,26 @@ c
 c  add the buoiancy term  
 c
       densit = 0.5*(dens(ic,jc,kc)+dens(ic,jm,kc))*rc(jc)**2*float(ibuo)
-c
-c     add the randomforcing term
-c
-      om_tape = nint(om_th*sin(zm(kc)))
-      forc = forc_mod * rc(jc)**2
-     %      * sin(om_tape * thetam(ic) + ph_th)
-     %      * (rc(jc)-r_min)/(r_max-r_min)
-     %      * cos(om_z * zm(kc) + ph_z)
 
       dph(ic,jc,kc)=d11q1v+d33q3v-hq2+coriol
      %               +densit*(sinpm(kc)*cos(thetam(ic))) !gravita'' allimeata in x
-     %               +float(iforc)*forc                  !simple oscillating random forcing
 c    %               +densit*(-cospm(kc))         !gravita'' verticale
 c    %               +densit*(rc(n2)/rc(jc))**2  !tutta la massa al centro
 c    %               +densit                     !gravita' costante
 c    %               +densit*(rc(jc)/rc(n2))     !self-gravitating sphere
+
 c
+c     add the random forcing term
+c
+      if(iforc.eq.1) then
+        om_tape = nint(om_th*sin(zm(kc)))
+        forc = forc_mod * rc(jc)**2
+     %        * sin(om_tape * thetam(ic) + ph_th)
+     %        * (rc(jc)-r_min)/(r_max-r_min)
+     %        * cos(om_z * zm(kc) + ph_z)
+        dph(ic,jc,kc) = dph(ic,jc,kc) + forc !simple oscillating random forcing
+      end if
+
    20 continue
 !$OMP  END PARALLEL DO
 c
@@ -488,7 +494,7 @@ c     definition of the random coeff. for the forcing
       call random_number(rand)
       ph_z = rand * 2*pi
       call random_number(rand)
-      forc_mod = rand
+      forc_mod = forc_scale * rand
       r_max = rc(n2)
       r_min = rc(1)
 
@@ -637,19 +643,22 @@ c
 c  add the buoiancy term  
 c
       densit = 0.5*(dens(ic,jc,kc)+dens(ic,jc,km))*sinpc(kc)*float(ibuo)
-c
-c     add the randomforcing term
-c
-      om_tape = nint(om_th*sin(zz(kc)))
-      forc = forc_mod * sin(zz(kc))
-     %      * sin(om_tape * thetam(ic) + ph_th)
-     %      * (rm(jc)-r_min)/(r_max-r_min)
-     %      * cos(om_z * zz(kc) + ph_z) 
 
       qcap(ic,jc,kc)=d11q1v+d11q2v-hq3+coriol
      %               +densit*(+cospc(kc)*cos(thetam(ic))) !gravita'' allimeata in x
-     %               +float(iforc)*forc                   !simple oscillating random forcing
 c    %               +densit*(+sinpc(kc))         !gravita'' verticale
+c
+c     add the randomforcing term
+c
+      if(iforc.eq.1) then
+        om_tape = nint(om_th*sin(zz(kc)))
+        forc = forc_mod * sin(zz(kc))
+     %        * sin(om_tape * thetam(ic) + ph_th)
+     %        * (rm(jc)-r_min)/(r_max-r_min)
+     %        * cos(om_z * zz(kc) + ph_z)
+        qcap(ic,jc,kc) = qcap(ic,jc,kc) + forc
+      end if
+     
 c
    30 continue
 !$OMP  END PARALLEL DO

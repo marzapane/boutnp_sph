@@ -53,6 +53,7 @@ c     real     qqmax,qqtot
       real     uaxN(3,m2),uaxS(3,m2),qaxN(3,m1,m2),qaxS(3,m1,m2)
       real     mode(m3,m1),spec(m3,m1)
       integer  nspec,ispec
+      integer  iforc,forc_scale
       common /specf/  mode,spec,nspec,ispec
       common /uqax/   uaxN,uaxS,qaxN,qaxS
       common /avesta/ istat,iresta,timeav,timerms
@@ -149,5 +150,5 @@ C      NUOVE AGGIUNTE
       common/sphe1/    usinpm(m3), usinpc(m3), sinpm(m3), sinpc(m3),
      %                 cospc(m3),cospm(m3),utanpc(m3),
      %                 udx3vis2(m3),utanpm(m3)
-      common /forcing/ iforc
+      common /forcing/ iforc,forc_scale
       common /icond/ indexForInitial

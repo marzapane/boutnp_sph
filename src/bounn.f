@@ -91,7 +91,7 @@ c
         read(15,301) dummy
         read(15,*) indexForInitial
         read(15,301) dummy
-        read(15,*) iforc,ispec
+        read(15,*) forc_scale,ispec
 301     format(a4)
       close(15)
       r0 = rext
@@ -103,6 +103,12 @@ c set free-slip inner BC for full sphere
           read(15,*) (coson(i,j),j=1,3)
         end do
         close(15)
+      end if
+
+      if(forc_scale.eq.0.) then
+        iforc=0
+      else
+        iforc=1
       end if
 c
 c
