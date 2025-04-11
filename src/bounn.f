@@ -1557,8 +1557,7 @@ c Enforce periodicity on the azymuthal direction
       end do
 
       itime=10*time
-      write(ipfi,92) itime
-   92 format(i5.5)
+      write(ipfi,'(i6.6)') itime
       namfi3='./dati/spbou'//ipfi//'.q'
       write(6,201)time,namfi3
   201 format(10x,'At t=',e10.3,' write data on ',a20)
