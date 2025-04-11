@@ -81,4 +81,4 @@ directories:
 
 clean:
 	rm -rf obj/*.o
-	rm boutnp_sph
+	if [ -f boutnp_sph ]; then rm boutnp_sph; fi
