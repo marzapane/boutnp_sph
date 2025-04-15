@@ -1263,7 +1263,7 @@ c***********************************************************************
       subroutine outpf(time)
       include'param.f'
       character*70 namfi3
-      character*5 ipfi
+      character*6 ipfi
       real vt(m1,m2,m3),vr(m1,m2,m3),vp(m1,m2,m3)
       real vx(m1,m2,m3),vy(m1,m2,m3),vz(m1,m2,m3)
       real prc(m1,m2,m3),temp(m1,m2,m3)
