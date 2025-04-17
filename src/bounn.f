@@ -120,6 +120,25 @@ c
 c
 c
       call openfi
+
+  527 format(//,5x,'Grid size exceeds allocated memory: ',
+     %   i4, ' > ', i4, //,
+     %   'Interrupting the program.')
+      if(n1.gt.m1) then
+        write(6,527)  n1, m1
+        write(32,527) n1, m1
+        stop
+      end if
+      if(n2.gt.m2) then
+        write(6,527)  n2, m2
+        write(32,527) n2, m2
+        stop
+      end if
+      if(n3.gt.m3) then
+        write(6,527)  n3, m3
+        write(32,527) n3, m3
+        stop
+      end if
 c
       pi=2.*asin(1.)
       tfini=dt*ntst
