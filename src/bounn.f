@@ -2464,7 +2464,7 @@ C           south pole
           end do
         end do
 
-       if(nread.eq.0) then
+       if((nread.eq.0).and.(time.lt.tpin)) then
          open(38,file='enerv.out',status='replace')
        else
          open(38,file='enerv.out',status='old',position='append')
