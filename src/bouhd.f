@@ -81,15 +81,17 @@ c***********************************************************************
 c
 c     h term for the q1 momentum equation at i,j+1/2,k+1/2
 c
-      integer om_th,om_z
+      integer om_th,om_z,ampl
       real ph_th,ph_z,forc_mod,rand,pi
       pi = 2. * asin (1.)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
       call random_number(rand)
-      om_th = nint(rand * 16)
+      ampl = nint(n1/32.)
+      om_th = n1/4 - ampl/2 + nint(rand * ampl)
       call random_number(rand)
-      om_z = nint(rand * 8)*2
+      ampl = nint(n3/32.)
+      om_z = n3/4 - ampl/2 + nint(rand * ampl/2)*2
       call random_number(rand)
       ph_th = rand * 2*pi
       call random_number(rand)
@@ -293,15 +295,17 @@ c***********************************************************************
 c
 c     h term for the q2 momentum equation at i+1/2,j,k+1/2
 c
-      integer om_th,om_z
+      integer om_th,om_z,ampl
       real ph_th,ph_z,forc_mod,rand,pi
       pi = 2. * asin (1.)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
       call random_number(rand)
-      om_th = nint(rand * 16)
+      ampl = nint(n1/32.)
+      om_th = n1/4 - ampl/2 + nint(rand * ampl)
       call random_number(rand)
-      om_z = nint(rand * 8)*2
+      ampl = nint(n3/32.)
+      om_z = n3/4 - ampl/2 + nint(rand * ampl/2)*2
       call random_number(rand)
       ph_th = rand * 2*pi
       call random_number(rand)
@@ -480,15 +484,17 @@ c***********************************************************************
 c
 c     h term for the q3 momentum equation at i+1/2,j+1/2,k
 c
-      integer om_th,om_z
-      real ph_th,ph_z,forc_mod,rand,pi
+      integer om_th,om_z,ampl
+      real ph_th,ph_z,forc_mod,rand
       pi = 2. * asin (1.)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
       call random_number(rand)
-      om_th = nint(rand * 16)
+      ampl = nint(n1/32.)
+      om_th = n1/4 - ampl/2 + nint(rand * ampl)
       call random_number(rand)
-      om_z = nint(rand * 8)*2
+      ampl = nint(n3/32.)
+      om_z = n3/4 - ampl/2 + nint(rand * ampl/2)*2
       call random_number(rand)
       ph_th = rand * 2*pi
       call random_number(rand)
