@@ -81,17 +81,19 @@ c***********************************************************************
 c
 c     h term for the q1 momentum equation at i,j+1/2,k+1/2
 c
-      integer om_th,om_z,ampl
-      real ph_th,ph_z,forc_mod,rand,pi
+      integer om_th,om_z
+      real ph_th,ph_z,forc_mod,rand,cntr,ampl,pi
       pi = 2. * asin (1.)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
+      cntr = n1/8.d0
+      ampl = n1/32.d0
       call random_number(rand)
-      ampl = nint(n1/32.)
-      om_th = n1/4 - ampl/2 + nint(rand * ampl)
+      om_th = nint(cntr - ampl/2 + rand*ampl)
+      cntr = n3/8.d0
+      ampl = n3/32.d0
       call random_number(rand)
-      ampl = nint(n3/32.)
-      om_z = n3/4 - ampl/2 + nint(rand * ampl/2)*2
+      om_z = nint((cntr - ampl/2 + rand*ampl) /2) *2
       call random_number(rand)
       ph_th = rand * 2*pi
       call random_number(rand)
@@ -275,7 +277,7 @@ c
       if(iforc.eq.1) then
         om_tape = nint(om_th*sin(zm(kc)))
         forc = forc_mod
-     %        * sin(om_tape * thetac(ic) + ph_th)
+     %        * sin(om_tape * (thetac(ic)+ph_th))
      %        * (rm(jc)-r_min)/(r_max-r_min)
      %        * cos(om_z * zm(kc) + ph_z)
         dq(ic,jc,kc) = dq(ic,jc,kc) + forc !simple oscillating random forcing
@@ -295,17 +297,19 @@ c***********************************************************************
 c
 c     h term for the q2 momentum equation at i+1/2,j,k+1/2
 c
-      integer om_th,om_z,ampl
-      real ph_th,ph_z,forc_mod,rand,pi
+      integer om_th,om_z
+      real ph_th,ph_z,forc_mod,rand,cntr,ampl,pi
       pi = 2. * asin (1.)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
+      cntr = n1/8.d0
+      ampl = n1/32.d0
       call random_number(rand)
-      ampl = nint(n1/32.)
-      om_th = n1/4 - ampl/2 + nint(rand * ampl)
+      om_th = nint(cntr - ampl/2 + rand*ampl)
+      cntr = n3/8.d0
+      ampl = n3/32.d0
       call random_number(rand)
-      ampl = nint(n3/32.)
-      om_z = n3/4 - ampl/2 + nint(rand * ampl/2)*2
+      om_z = nint((cntr - ampl/2 + rand*ampl) /2) *2
       call random_number(rand)
       ph_th = rand * 2*pi
       call random_number(rand)
@@ -466,7 +470,7 @@ c
       if(iforc.eq.1) then
         om_tape = nint(om_th*sin(zm(kc)))
         forc = forc_mod * rc(jc)**2
-     %        * sin(om_tape * thetam(ic) + ph_th)
+     %        * sin(om_tape * (thetam(ic)+ph_th))
      %        * (rc(jc)-r_min)/(r_max-r_min)
      %        * cos(om_z * zm(kc) + ph_z)
         dph(ic,jc,kc) = dph(ic,jc,kc) + forc !simple oscillating random forcing
@@ -484,17 +488,19 @@ c***********************************************************************
 c
 c     h term for the q3 momentum equation at i+1/2,j+1/2,k
 c
-      integer om_th,om_z,ampl
-      real ph_th,ph_z,forc_mod,rand
+      integer om_th,om_z
+      real ph_th,ph_z,forc_mod,cntr,ampl,rand
       pi = 2. * asin (1.)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
+      cntr = n1/8.d0
+      ampl = n1/32.d0
       call random_number(rand)
-      ampl = nint(n1/32.)
-      om_th = n1/4 - ampl/2 + nint(rand * ampl)
+      om_th = nint(cntr - ampl/2 + rand*ampl)
+      cntr = n3/8.d0
+      ampl = n3/32.d0
       call random_number(rand)
-      ampl = nint(n3/32.)
-      om_z = n3/4 - ampl/2 + nint(rand * ampl/2)*2
+      om_z = nint((cntr - ampl/2 + rand*ampl) /2) *2
       call random_number(rand)
       ph_th = rand * 2*pi
       call random_number(rand)
@@ -659,7 +665,7 @@ c
       if(iforc.eq.1) then
         om_tape = nint(om_th*sin(zz(kc)))
         forc = forc_mod * sin(zz(kc))
-     %        * sin(om_tape * thetam(ic) + ph_th)
+     %        * sin(om_tape * (thetam(ic)+ph_th))
      %        * (rm(jc)-r_min)/(r_max-r_min)
      %        * cos(om_z * zz(kc) + ph_z)
         qcap(ic,jc,kc) = qcap(ic,jc,kc) + forc
