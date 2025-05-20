@@ -23,7 +23,7 @@ c***********************************************************************
 c
       subroutine spect
       include 'param.f'
-      dimension rwc(m2),rwm(m2)
+      dimension rwc(m2),rwm(m2),pwc(m3),pwm(m3)
       real      rtr,rsc,rsm,pi
       real   xxr(m1m+2,m3m),wwork(m1m+1,m3m)
       integer n1mh
@@ -36,10 +36,18 @@ c
       rsc = 0.0d0
       rsm = 0.0d0
       do j = 1,n2
-        rwc(j) = rc(j)*rc(j) * g2rc(j)/dx2
-        rsc = rsc + rwc(j)
+        rwc(j) = g2rc(j)/dx2
+c r^2 factor simplifies between integration measure (r^2 dr)
+c and field (v_r = q2/r^2)
+        rsc = rsc + rc(j)*rc(j) * rwc(j)
         rwm(j) = rm(j)*rm(j) * g2rm(j)/dx2
         rsm = rsm + rwm(j)
+      end do
+      do k = 1,n3
+        pwc(k) = g3rc(k)/dx3
+c sin(phi) factor simplifies between integration measure (sin(phi) dphi)
+c and field (v_phi = q3/sin(phi))
+        pwm(k) = sinpm(k) * g3rm(k)/dx3
       end do
 c initialize xxr
       do k = 1, n3m
@@ -49,21 +57,21 @@ c initialize xxr
       end do
 c average v_r in xxr
       do j = 1,n2
-        rtr = rwc(j)/rc(j)
         do k = 1,n3m
-          xxr(1,k) = xxr(1,k) + q2(n1m,j,k)*rtr
+          xxr(1,k) = xxr(1,k) + q2(n1m,j,k)*rwc(j)*pwm(k)
           do i = 1,n1m
             is = i+1
-            xxr(is,k) = xxr(is,k) + q2(i,j,k)*rtr
+            xxr(is,k) = xxr(is,k) + q2(i,j,k)*rwc(j)*pwm(k)
           end do
-          xxr(n1md,k) = xxr(n1md,k) + q2(1,j,k)*rtr
+          xxr(n1md,k) = xxr(n1md,k) + q2(1,j,k)*rwc(j)*pwm(k)
         end do
       end do
-      do k = 1, n3m
-        do i = 1, n1md
-          xxr(i,k) = xxr(i,k)/rsc
-        end do
-      end do
+ccc Uncomment to average in radial direction (instead of only summing)
+c     do k = 1, n3m
+c       do i = 1, n1md
+c         xxr(i,k) = xxr(i,k)/rsc
+c       end do
+c     end do
 c
 c     fft applied to the (q_2) by fft99
 c   from physical to wave number space
@@ -87,19 +95,20 @@ c
       end do
       do 2 j=1,n2m
         do 12 k=1,n3m
-          xxr(1,k) = xxr(1,k) + q1(n1m,j,k)*rwm(j)
+          xxr(1,k) = xxr(1,k) + q1(n1m,j,k)*rwm(j)*pwm(k)
           do 22 i=1,n1m
             is=i+1
-            xxr(is,k) = xxr(is,k) + q1(i,j,k)*rwm(j)
+            xxr(is,k) = xxr(is,k) + q1(i,j,k)*rwm(j)*pwm(k)
   22      continue
-          xxr(n1md,k) = xxr(n1md,k) + q1(1,j,k)*rwm(j)
+          xxr(n1md,k) = xxr(n1md,k) + q1(1,j,k)*rwm(j)*pwm(k)
   12    continue
   2   continue
-      do k = 1, n3m
-        do i = 1, n1md
-          xxr(i,k) = xxr(i,k)/rsm
-        end do
-      end do
+ccc Uncomment to average in radial direction (instead of only summing)
+c     do k = 1, n3m
+c       do i = 1, n1md
+c         xxr(i,k) = xxr(i,k)/rsm
+c       end do
+c     end do
 c
 c     fft applied to the (q_1) by fft99
 c   from physical to wave number space
@@ -123,19 +132,20 @@ c
       end do
       do 3 j=1,n2m
         do 13 k=1,n3m
-          xxr(1,k) = xxr(1,k) + q3(n1m,j,k)*rwm(j)
+          xxr(1,k) = xxr(1,k) + q3(n1m,j,k)*rwm(j)*pwc(k)
           do 23 i=1,n1m
             is=i+1
-            xxr(is,k) = xxr(is,k) + q3(i,j,k)*rwm(j)
+            xxr(is,k) = xxr(is,k) + q3(i,j,k)*rwm(j)*pwc(k)
    23     continue
-          xxr(n1md,k) = xxr(n1md,k) + q3(1,j,k)*rwm(j)
+          xxr(n1md,k) = xxr(n1md,k) + q3(1,j,k)*rwm(j)*pwc(k)
    13   continue
    3  continue
-      do k = 1, n3m
-        do i = 1, n1md
-          xxr(i,k) = xxr(i,k)/rsm
-        end do
-      end do
+ccc Uncomment to average in radial direction (instead of only summing)
+c     do k = 1, n3m
+c       do i = 1, n1md
+c         xxr(i,k) = xxr(i,k)/rsm
+c       end do
+c     end do
 c
 c     fft applied to the (q_3) by fft99
 c   from physical to wave number space
@@ -163,7 +173,7 @@ c
       integer n1mh
 
       n1mh=n1m/2+1
-      write(filsp,'(A6,I6.6,A4)') 'spctr_', int(10.*time), '.bin'
+      write(filsp,'(A5,I6.6,A4)') 'spctr', int(10.*time), '.bin'
       open(39,file=filsp,form='unformatted',status='unknown')
       write(39) n3m, n1mh
       write(39) (((mode(k,i)),k=1,n3m),i=1,n1mh)

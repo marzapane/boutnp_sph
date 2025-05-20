@@ -1139,7 +1139,7 @@ c                                                                      *
 c***********************************************************************
       subroutine enerc(time)
       include 'param.f'
-      dimension ener(m1),rtr(m2),ffat(m1)
+      dimension ener(m1),rtr(m2),ptr(m3),ffat(m1)
       real   xxr(m1m+2,m3m),wwork(m1m+1,m3m)
       character*14 filth,filte,filba,filen,filso,filve,filnu,filbaper
       common/names/filth,filte,filba,filen,filso,filve,filnu,filbaper
@@ -1157,7 +1157,7 @@ c
       end do
       rtr(1)=1.
       do 111 j=2,n2
-        rtr(j)=1./rc(j)
+        rtr(j)=1./(rc(j)*rc(j))
  111  continue
       do 1 j=1,n2
         do 11 k=1,n3m
@@ -1211,14 +1211,19 @@ c
    2  continue
 c
 c
+      ptr(1)=0.
+      do 222 k=2,n3m
+        ptr(k)=usinpc(k)
+      ptr(n3)=0.
+ 222  continue
       do 3 j=1,n2m
         do 13 k=1,n3m
-          xxr(1,k)=q3(n1m,j,k)
+          xxr(1,k)=q3(n1m,j,k)*ptr(k)
           do 23 i=1,n1m
             is=i+1
-            xxr(is,k)=q3(i,j,k)
+            xxr(is,k)=q3(i,j,k)*ptr(k)
    23     continue
-          xxr(n1md,k)=q3(1,j,k)
+          xxr(n1md,k)=q3(1,j,k)*ptr(k)
    13   continue
 c
 c     fft applied to the (q_3) by fft99
@@ -1245,7 +1250,8 @@ c***********************************************************************
           do 116 j=1,n2m
             iadd=i+(j-1)*n1m+(k-1)*n1m*n2m
             ener(i)=ener(i)
-     %             +ffat(i)*rhs(iadd)*rm(j)*g2rm(j)*g3rm(k)*dvol
+     %             +ffat(i)*rhs(iadd)*rm(j)*rm(j)*sinpm(k)
+     %              *g2rm(j)*g3rm(k)*dvol
  116  continue
       open(39,file=filen,status='unknown')
       write(39,546) time,(ener(i),i=nini,nfin,nstri)
@@ -1358,7 +1364,13 @@ c for free-slip condition, extrapolate to the boundary
             st=sin(thetac(ic))
             vt(ic,1,kc)=0.5*((1.+rrstg)*(q1(ic,1,kc)+q1(ic,1,km))
      %                       -rrstg*(q1(ic,2,kc)+q1(ic,2,km)))
-            vr(ic,1,kc)=0.0d0
+            if(rint.eq.0.) then
+c deal with the center of full sphere (inslwri=1, see papero)
+              vr(ic,1,kc)=(1.+rrcol)*vr(ic,2,kc)
+     %                    -rrcol*vr(ic,3,kc)
+            else
+              vr(ic,1,kc)=0.0d0
+            end if
             vp(ic,1,kc)=0.5*((1.+rrstg)*(q3(ic,1,kc)+q3(im,1,kc))
      %                       -rrstg*(q3(ic,2,kc)+q3(im,2,kc)))
      %                                               /sin(zz(kc))
@@ -1370,15 +1382,6 @@ c for free-slip condition, extrapolate to the boundary
      %                  +vp(ic,1,kc)*st*cp
             vz(ic,1,kc)= vr(ic,1,kc)*cp
      %                  -vp(ic,1,kc)*sp
-          end do
-        end do
-      end if
-c deal with the center of full sphere (inslwri=1, see papero)
-      if(rint.eq.0.) then
-        do kc=2,n3m
-          do ic=1,n1m
-            vr(ic,1,kc)=(1.+rrcol)*vr(ic,2,kc)
-     %                  -rrcol*vr(ic,3,kc)
           end do
         end do
       end if
