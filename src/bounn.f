@@ -1593,7 +1593,8 @@ c Enforce periodicity on the azymuthal direction
      %   ic=1,n1),jc=1,n2),kc=1,n3),
      %   (((vt(ic,jc,kc),ic=1,n1),jc=1,n2),kc=1,n3),
      %   (((vr(ic,jc,kc),ic=1,n1),jc=1,n2),kc=1,n3),
-     %   (((vp(ic,jc,kc),ic=1,n1),jc=1,n2),kc=1,n3)
+     %   (((vp(ic,jc,kc),ic=1,n1),jc=1,n2),kc=1,n3),
+     %   (((pr(ic,jc,kc),ic=1,n1),jc=1,n2),kc=1,n3)
       close(99)
 
       namfi3='./dati/boum'//ipfi//'.q'
