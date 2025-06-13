@@ -154,3 +154,22 @@ def fitMinMax(spctr, modes, i):
 # modes, spctr = readspctr(wdir/'noslip/ross/0.3/spctr080000.bin')
 # plotSpctr(spctr, modes)
 # fitMinMax(spctr, modes, 128)
+
+from scipy.stats import binned_statistic
+def avgSpctr(spctr, modes):
+    n3 = modes.shape[0]
+    n1q = int(modes.shape[1] / 2)
+    binEdges = np.concatenate([np.linspace(1, n3/2, n1q)[:-1], np.logspace(np.log10(n3/2), np.log10(modes[2:-3].max()/2), n1q)])
+    avgSpctr, binEdges, _ = binned_statistic(modes[2:-3,1:].flatten(), spctr[2:-3,1:].flatten(), statistic='mean', bins=binEdges)
+    avgModes = (binEdges[1:] + binEdges[:-1])/2
+    return avgModes, avgSpctr
+
+# modes, spctr = readspctr(wdir/'free/23/spctr007500.bin'); plt.loglog(*avgSpctr(spctr*(9/2)**2, modes), label='2:3')
+# modes, spctr = readspctr(wdir/'free/910/spctr046000.bin'); plt.loglog(*avgSpctr(spctr, modes), label='9:10')
+# modes, spctr = readspctr(wdir/'free/1920/spctr070000.bin'); plt.loglog(*avgSpctr(spctr*(9/19)**2, modes), label='19:20')
+# modes, spctr = readspctr(wdir/'free/4950/spctr066000.bin'); plt.loglog(*avgSpctr(spctr*(9/49)**2, modes), label='49:50')
+# n3h = int(modes.shape[0] / 2)
+# plt.plot(modes[n3h,1:],1e-1*modes[n3h,1:]**(-5/3))
+# plt.xlabel(r'$k$')
+# plt.ylabel(r'$E(k)$')
+# plt.show()
