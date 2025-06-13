@@ -1,4 +1,7 @@
 # Function to read Fortran unformatted binary files
+# To use import the library using the following command:
+# exec(open('/home/bilottos/Documents/PhD/Thesis_project/Programs/boutnp_sph_parallel/code/src/utils.py').read())
+
 def readfbin(filePath):
     with open(filePath, 'rb') as f:
         _ = np.fromfile(f, dtype=np.int32, count=1)
@@ -41,7 +44,7 @@ def readfbin(filePath):
         'vth':  v_th
     }
 
-def radial_rms(f):
+def radial_rms(f, xc):
     n1 = f.shape[0]
     radius = xc[0,:,int((xc.shape[2]-1)/2)]
     sin_th = xc[0,0]/radius[0]
@@ -55,18 +58,18 @@ def radial_rms(f):
 def plotRadial(filePath, savePath=None):
     (n1,n2,n3,xc,yc,zc,E,vph,vrh,vth) = readfbin(filePath).values()
     radius = xc[0,:,int((xc.shape[2]-1)/2)]
-    avg, rms = radial_rms(vrh)
+    avg, rms = radial_rms(vrh, xc)
     plt.plot(radius, avg, c='xkcd:orange', ls='dashed', label='$\\bar{v}_r$')
-    avg, rms = radial_rms(vth)
+    avg, rms = radial_rms(vth, xc)
     plt.plot(radius, avg, c='xkcd:sky blue', ls='dashed', label='$\\bar{v}_\\theta$')
-    avg, rms = radial_rms(vph)
+    avg, rms = radial_rms(vph, xc)
     plt.plot(radius, avg, c='xkcd:pink', ls='dashed', label='$\\bar{v}_\\varphi$')
-    avg, rms = radial_rms(vrh)
-    plt.plot(radius, rms, c='xkcd:orange', label='$\\sigma(v_r)$');
-    avg, rms = radial_rms(vth)
-    plt.plot(radius, rms, c='xkcd:sky blue', label='$\\sigma(v_\\theta)$');
-    avg, rms = radial_rms(vph)
-    plt.plot(radius, rms, c='xkcd:pink', label='$\\sigma(v_\\varphi)$');
+    avg, rms = radial_rms(vrh, xc)
+    plt.plot(radius, rms, c='xkcd:orange', label='$\\sigma(v_r)$')
+    avg, rms = radial_rms(vth, xc)
+    plt.plot(radius, rms, c='xkcd:sky blue', label='$\\sigma(v_\\theta)$')
+    avg, rms = radial_rms(vph, xc)
+    plt.plot(radius, rms, c='xkcd:pink', label='$\\sigma(v_\\varphi)$')
     plt.legend(ncol=2)
     plt.xlabel('$r$')
     plt.ylabel('$v$')
@@ -83,38 +86,39 @@ def plotRadial(filePath, savePath=None):
 def readspctr(filePath):
     with open(filePath,'rb') as f:
         _ = np.fromfile(f, dtype=np.int32, count=1)
-        n3m = np.fromfile(f, dtype=np.int32, count=1)[0]
+        n3 = np.fromfile(f, dtype=np.int32, count=1)[0]
         n1mh = np.fromfile(f, dtype=np.int32, count=1)[0]
         _ = np.fromfile(f, dtype=np.int32, count=2)
-        modes = np.fromfile(f, dtype=np.float64, count=n3m*n1mh).reshape(n3m,n1mh, order='F')
+        modes = np.fromfile(f, dtype=np.float64, count=n3*n1mh).reshape(n3,n1mh, order='F')
         _ = np.fromfile(f, dtype=np.int32, count=2)
-        spctr = np.fromfile(f, dtype=np.float64, count=n3m*n1mh).reshape(n3m,n1mh, order='F')
+        spctr = np.fromfile(f, dtype=np.float64, count=n3*n1mh).reshape(n3,n1mh, order='F')
         _ = np.fromfile(f, dtype=np.int32, count=2)
         time = np.fromfile(f, dtype=np.float64, count=1)[0]
-        print('Imported arrays <modes> and <spctr> of size ' + str(n3m) + 'x' + str(n1mh) + ', at time ' + str(time))
+        print('Imported arrays <modes> and <spctr> of size ' + str(n3) + 'x' + str(n1mh) + ', at time ' + str(time))
         return modes, spctr
 
 def plotSpctr(spctr, modes, univScal=False, savePath=None):
     infernoCmap = plt.get_cmap('inferno')
+    n3 = modes.shape[0]
+    n1h = modes.shape[1]
+    n3h = int(n3 / 2)
     if univScal:
         # Kolmogorov scaling
         eps = (modes**2 * spctr).sum(axis=1)
         eta = eps**(-1/4)
-        for i in range(1, 129):
-            plt.loglog(modes[i,1:]*eta[i],(spctr[i,1:]/eps[i]**(1/4)+spctr[256-i,1:]/eps[256-i]**(1/4))/2, c=infernoCmap(i/128))
+        for i in range(0, n3h):
+            plt.loglog(modes[i,1:]*eta[i],(spctr[i,1:]/eps[i]**(1/4)+spctr[n3-1-i,1:]/eps[n3-i]**(1/4))/2, c=infernoCmap(i/n3h))
         plt.xlabel(r'$k\,\eta$')
         plt.ylabel(r'$E(k)\,\epsilon^{-1/4}$')
-        plt.plot(modes[10,1:]*eta[10],1e-4*(modes[10,1:]*eta[10])**(-5/3))
+        plt.plot(modes[n3h,1:]*eta[n3h],1e-1*(modes[n3h,1:]*eta[n3h])**(-5/3))
     else:
-        for i in range(1, 129):
-            plt.loglog(modes[i,1:],(spctr[i,1:]+spctr[256-i,1:])/2, c=infernoCmap(i/128))
+        for i in range(0, n3h):
+            plt.loglog(modes[i,1:],(spctr[i,1:]+spctr[n3-1-i,1:])/2, c=infernoCmap(i/n3h))
         plt.xlabel(r'$k$')
         plt.ylabel(r'$E(k)$')
-        plt.plot(modes[10,1:],1e-4*modes[10,1:]**(-5/3))
+        plt.plot(modes[n3h,1:],1e-1*modes[n3h,1:]**(-5/3))
     sm = plt.cm.ScalarMappable(cmap=infernoCmap, norm=plt.Normalize(vmin=0,vmax=np.pi))
     plt.colorbar(sm, label='polar angle [degrees]').ax.invert_yaxis()
-    # plt.xlim(3,5e2)
-    # plt.ylim(1e-13,1e-1)
     if savePath is None:
         plt.show()
     else:
