@@ -91,8 +91,8 @@ c
       piddr = pi / (r_max - r_min)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
-      cntr = n1m/8.d0
-      ampl = n1m/32.d0
+      cntr = n1m/16.d0
+      ampl = n1m/64.d0
       ctr_r = cntr * (r_max/r_min - 1.d0) / (2*pi)
       amp_r = ampl * (r_max/r_min - 1.d0) / (2*pi)
       call random_number(rand)
@@ -319,8 +319,8 @@ c
       piddr = pi / (r_max - r_min)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
-      cntr = n1m/8.d0
-      ampl = n1m/32.d0
+      cntr = n1m/16.d0
+      ampl = n1m/64.d0
       ctr_r = cntr * (r_max/r_min - 1.d0) / (2*pi)
       amp_r = ampl * (r_max/r_min - 1.d0) / (2*pi)
       call random_number(rand)
@@ -522,8 +522,8 @@ c
       piddr = pi / (r_max - r_min)
 c     definition of the random coeff. for the forcing
       rand = 1.d0
-      cntr = n1m/8.d0
-      ampl = n1m/32.d0
+      cntr = n1m/16.d0
+      ampl = n1m/64.d0
       ctr_r = cntr * (r_max/r_min - 1.d0) / (2*pi)
       amp_r = ampl * (r_max/r_min - 1.d0) / (2*pi)
       call random_number(rand)
