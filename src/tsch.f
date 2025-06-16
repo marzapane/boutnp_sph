@@ -81,20 +81,20 @@ c       ttt_in = etime_(t)
 c       write(6,*) ' ---------------------------------------- '
 c       write(6,*) ' T = ',time,' NTIME = ',ntime,' NS = ',ns
 c       timhd0 = etime_(t)
-        call hdnl1                    !! NON LINEAR TERMS
+        call hdnl1                 !! NON LINEAR TERMS
         call hdnl2                 !!  "    "      "
-        call hdnl3                          !!  "    "      "
-c       call hdnlro                          !!  "    "      "
-        call invtr1                        !! DQ1HAT=Q1HAT-Q1(N)
-        call invtr2                      !! DQ2HAT=Q2HAT-Q2(N)
-        call invtr3                      !! DQ3HAT=Q3HAT-Q3(N)
-c       call invtrro                      !! 
+        call hdnl3                 !!  "    "      "
+c       call hdnlro                !!  "    "      "
+        call invtr1                !! DQ1HAT=Q1HAT-Q1(N)
+        call invtr2                !! DQ2HAT=Q2HAT-Q2(N)
+        call invtr3                !! DQ3HAT=Q3HAT-Q3(N)
+c       call invtrro               !! 
 c
 c       tiphc0  = etime_(t)
         call divg           
 c       tiphc  = etime_(t)
 c       tiphc0  = etime_(t)
-        call phcalc          !! PRESSURE (FFT & TRID)
+        call phcalc                !! PRESSURE (FFT & TRID)
 c       tiphc  = etime_(t)
 c       tiphc0  = etime_(t)
         call updvp                 !! SOLENOIDAL VEL FIELD
@@ -103,7 +103,7 @@ c     qmax = 0.
 c     qtot = 0.
 c     call divgck(qmax,qtot)
 c       tiphc0  = etime_(t)
-        call prcalc                         !! PRESSURE FIELD
+        call prcalc                !! PRESSURE FIELD
 c       write(6,*) ' Total_Time = ',ttt_fi-ttt_in
  2000 continue                                                          
 c       ttt_11 = etime_(t)
