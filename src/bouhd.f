@@ -89,12 +89,16 @@ c
       r_max = rc(n2)
       r_min = rc(1)
       piddr = pi / (r_max - r_min)
+
 c     definition of the random coeff. for the forcing
-      rand = 1.d0
-      cntr = n1m/16.d0
-      ampl = n1m/64.d0
-      ctr_r = cntr * (r_max/r_min - 1.d0) / (2*pi)
-      amp_r = ampl * (r_max/r_min - 1.d0) / (2*pi)
+
+      rand = 1.
+c     call random_number(rand)
+      forc_mod = forc_scale * rand
+      cntr = n1m/16.
+      ampl = n1m/64.
+      ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
+      amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
       call random_number(rand)
       om_th = nint(cntr - ampl/2 + rand*ampl)
       call random_number(rand)
@@ -109,13 +113,11 @@ c     definition of the random coeff. for the forcing
       ph_z = rand * 2*pi
       call random_number(rand)
       ph_r = rand * 2*pi
-      call random_number(rand)
-      forc_mod = forc_scale * rand
 
       ivisc1=1
       small = 1.e-10
       icon = 0
-      usros = 1.d0/ros
+      usros = 1./ros
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,kpv,kmv,jpv,jmv,ipv,imv)
 !$OMP$ SHARED(rm,rc,thetac,zm,g2rm,g3rm,isym,ksym,ksyc)
@@ -317,12 +319,16 @@ c
       r_max = rc(n2)
       r_min = rc(1)
       piddr = pi / (r_max - r_min)
+
 c     definition of the random coeff. for the forcing
-      rand = 1.d0
-      cntr = n1m/16.d0
-      ampl = n1m/64.d0
-      ctr_r = cntr * (r_max/r_min - 1.d0) / (2*pi)
-      amp_r = ampl * (r_max/r_min - 1.d0) / (2*pi)
+
+      rand = 1.
+c     call random_number(rand)
+      forc_mod = forc_scale * rand
+      cntr = n1m/16.
+      ampl = n1m/64.
+      ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
+      amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
       call random_number(rand)
       om_th = nint(cntr - ampl/2 + rand*ampl)
       call random_number(rand)
@@ -337,13 +343,11 @@ c     definition of the random coeff. for the forcing
       ph_z = rand * 2*pi
       call random_number(rand)
       ph_r = rand * 2*pi
-      call random_number(rand)
-      forc_mod = forc_scale * rand
 
       ivisc2=1
       icon = 0
-      usros = 1.d0/ros
-      sudx1vis2 = 2.d0*dx1/ren
+      usros = 1./ros
+      sudx1vis2 = 2.*dx1/ren
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,kpv,kmv,ipv,imv)
 !$OMP$ SHARED(rm,rc,thetac,zm,g3rm,isym,ksym,ksyc)
@@ -520,12 +524,16 @@ c
       r_max = rc(n2)
       r_min = rc(1)
       piddr = pi / (r_max - r_min)
+
 c     definition of the random coeff. for the forcing
-      rand = 1.d0
-      cntr = n1m/16.d0
-      ampl = n1m/64.d0
-      ctr_r = cntr * (r_max/r_min - 1.d0) / (2*pi)
-      amp_r = ampl * (r_max/r_min - 1.d0) / (2*pi)
+
+      rand = 1.
+c     call random_number(rand)
+      forc_mod = forc_scale * rand
+      cntr = n1m/16.
+      ampl = n1m/64.
+      ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
+      amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
       call random_number(rand)
       om_th = nint(cntr - ampl/2 + rand*ampl)
       call random_number(rand)
@@ -540,13 +548,11 @@ c     definition of the random coeff. for the forcing
       ph_z = rand * 2*pi
       call random_number(rand)
       ph_r = rand * 2*pi
-      call random_number(rand)
-      forc_mod = forc_scale * rand
 
       ivisc3 = 1
       small = 1.e-10
       icon = 0
-      usros = 1.d0/ros
+      usros = 1./ros
       sudx1vis2 = 2.*dx1/ren
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,jpv,jmv,ipv,imv)
