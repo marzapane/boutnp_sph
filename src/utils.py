@@ -164,6 +164,7 @@ def avgSpctr(spctr, modes):
     avgModes = (binEdges[1:] + binEdges[:-1])/2
     return avgModes, avgSpctr
 
+# # Plot rescaled energy spectrum
 # modes, spctr = readspctr(wdir/'free/23/spctr007500.bin'); plt.loglog(*avgSpctr(spctr*(9/2)**2, modes), label='2:3')
 # modes, spctr = readspctr(wdir/'free/910/spctr046000.bin'); plt.loglog(*avgSpctr(spctr, modes), label='9:10')
 # modes, spctr = readspctr(wdir/'free/1920/spctr070000.bin'); plt.loglog(*avgSpctr(spctr*(9/19)**2, modes), label='19:20')
@@ -172,4 +173,16 @@ def avgSpctr(spctr, modes):
 # plt.plot(modes[n3h,1:],1e-1*modes[n3h,1:]**(-5/3))
 # plt.xlabel(r'$k$')
 # plt.ylabel(r'$E(k)$')
+# plt.legend()
+# plt.show()
+
+# # Plot energy VS time
+# data = np.genfromtxt(wdir / 'free/12/enerv.out').T;   plt.plot(data[0], data[1],       label='1:2')
+# data = np.genfromtxt(wdir / 'free/34/enerv.out').T;   plt.plot(data[0], data[1]/3**2,  label='3:4')
+# data = np.genfromtxt(wdir / 'free/89/enerv.out').T;   plt.plot(data[0], data[1]/8**2,  label='8:9')
+# data = np.genfromtxt(wdir / 'free/1920/enerv.out').T; plt.plot(data[0], data[1]/19**2, label='19:20')
+# data = np.genfromtxt(wdir / 'free/4950/enerv.out').T; plt.plot(data[0], data[1]/49**2, label='49:50')
+# plt.xlabel('$t$')
+# plt.ylabel('$E$')
+# plt.legend()
 # plt.show()
