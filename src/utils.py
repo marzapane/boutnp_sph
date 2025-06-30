@@ -83,7 +83,7 @@ def plotRadial(filePath, savePath=None):
 # plotRadial('spin_free/spbou20000.q')
 
 
-def readspctr(filePath):
+def readSpctr(filePath):
     with open(filePath,'rb') as f:
         _ = np.fromfile(f, dtype=np.int32, count=1)
         n3 = np.fromfile(f, dtype=np.int32, count=1)[0]
@@ -110,13 +110,13 @@ def plotSpctr(spctr, modes, univScal=False, savePath=None):
             plt.loglog(modes[i,1:]*eta[i],(spctr[i,1:]/eps[i]**(1/4)+spctr[n3-1-i,1:]/eps[n3-i]**(1/4))/2, c=infernoCmap(i/n3h))
         plt.xlabel(r'$k\,\eta$')
         plt.ylabel(r'$E(k)\,\epsilon^{-1/4}$')
-        plt.plot(modes[n3h,1:]*eta[n3h],1e-1*(modes[n3h,1:]*eta[n3h])**(-5/3))
+        plt.plot(modes[n3h,1:]*eta[n3h],1e-1*(modes[n3h,1:]*eta[n3h])**(-5/3), label=r'$k^{-5/3}$')
     else:
         for i in range(0, n3h):
             plt.loglog(modes[i,1:],(spctr[i,1:]+spctr[n3-1-i,1:])/2, c=infernoCmap(i/n3h))
         plt.xlabel(r'$k$')
         plt.ylabel(r'$E(k)$')
-        plt.plot(modes[n3h,1:],1e-1*modes[n3h,1:]**(-5/3))
+        plt.plot(modes[n3h,1:],1e-1*modes[n3h,1:]**(-5/3), label=r'$k^{-5/3}$')
     sm = plt.cm.ScalarMappable(cmap=infernoCmap, norm=plt.Normalize(vmin=0,vmax=np.pi))
     plt.colorbar(sm, label='polar angle [degrees]').ax.invert_yaxis()
     if savePath is None:
@@ -151,7 +151,7 @@ def fitMinMax(spctr, modes, i):
     plt.legend()
     plt.show()
 
-# modes, spctr = readspctr(wdir/'noslip/ross/0.3/spctr080000.bin')
+# modes, spctr = readSpctr(wdir / 'free/12/spctr080000.bin')
 # plotSpctr(spctr, modes)
 # fitMinMax(spctr, modes, 128)
 
@@ -165,12 +165,13 @@ def avgSpctr(spctr, modes):
     return avgModes, avgSpctr
 
 # # Plot rescaled energy spectrum
-# modes, spctr = readspctr(wdir/'free/23/spctr007500.bin'); plt.loglog(*avgSpctr(spctr*(9/2)**2, modes), label='2:3')
-# modes, spctr = readspctr(wdir/'free/910/spctr046000.bin'); plt.loglog(*avgSpctr(spctr, modes), label='9:10')
-# modes, spctr = readspctr(wdir/'free/1920/spctr070000.bin'); plt.loglog(*avgSpctr(spctr*(9/19)**2, modes), label='19:20')
-# modes, spctr = readspctr(wdir/'free/4950/spctr066000.bin'); plt.loglog(*avgSpctr(spctr*(9/49)**2, modes), label='49:50')
+# modes, spctr = readSpctr(wdir / 'free/12/spctr007500.bin');   plt.loglog(*avgSpctr(spctr,       modes), label='1:2')
+# modes, spctr = readSpctr(wdir / 'free/34/spctr046000.bin');   plt.loglog(*avgSpctr(spctr/3**2,  modes), label='3:4')
+# modes, spctr = readSpctr(wdir / 'free/89/spctr046000.bin');   plt.loglog(*avgSpctr(spctr/8**2,  modes), label='8:9')
+# modes, spctr = readSpctr(wdir / 'free/1920/spctr070000.bin'); plt.loglog(*avgSpctr(spctr/19**2, modes), label='19:20')
+# modes, spctr = readSpctr(wdir / 'free/4950/spctr066000.bin'); plt.loglog(*avgSpctr(spctr/49**2, modes), label='49:50')
 # n3h = int(modes.shape[0] / 2)
-# plt.plot(modes[n3h,1:],1e-1*modes[n3h,1:]**(-5/3))
+# plt.plot(modes[n3h,1:],1e-1*modes[n3h,1:]**(-5/3), label=r'$k^{-5/3}$')
 # plt.xlabel(r'$k$')
 # plt.ylabel(r'$E(k)$')
 # plt.legend()
