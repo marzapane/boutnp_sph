@@ -52,6 +52,7 @@ program subsample_data
   character(len=10)  :: stride_str
   integer            :: io_status, dummy_int, arg_count
   integer, parameter :: in_unit = 10, out_unit = 11
+  logical            :: sample_grid
 
   ! Stride per il sottocampionamento
   integer :: i_stride, j_stride, k_stride
@@ -92,55 +93,10 @@ program subsample_data
   write(*, *)
 
   ! 2. Costruzione dei nomi dei file
-  grid_in_file  = 'grid.xyz'
-  grid_out_file = 'subgrid.xyz'
   data_in_file  = 'boum' // trim(time_step_str) // '.q'
   data_out_file = 'bous' // trim(time_step_str) // '.q'
-
-  ! ===========================================================================
-  ! 3. Processa il file della griglia (grid.xyz)
-  ! ===========================================================================
-  write(*, '(a, a)') "-> Processando il file della griglia: ", trim(grid_in_file)
-  open(unit=in_unit, file=trim(grid_in_file), form='unformatted', status='old', &
-       action='read', iostat=io_status)
-  if (io_status /= 0) stop "Errore: impossibile aprire il file di input della griglia."
-  read(in_unit) dummy_int
-  read(in_unit) n1, n2, n3
-  write(*, '(a, 3(i0, a))') "   Dimensioni griglia originale: (", n1, ", ", n2, ", ", n3, ")"
-  allocate(xxx(n1, n2, n3), yyy(n1, n2, n3), zzz(n1, n2, n3), stat=io_status)
-  if (io_status /= 0) stop "Errore: impossibile allocare memoria per la griglia completa."
-  read(in_unit) xxx, yyy, zzz
-  close(in_unit)
-
-  ! Esecuzione del sottocampionamento tramite "array slicing"
-  n1_new = size(xxx(1::i_stride, 1, 1))
-  n2_new = size(xxx(1, 1::j_stride, 1))
-  n3_new = size(xxx(1, 1, 1::k_stride))
-  write(*, '(a, 3(i0, a))') "   Dimensioni griglia ridotta:   (", n1_new, ", ", n2_new, ", ", n3_new, ")"
-  allocate(xxx_new(n1_new, n2_new, n3_new), &
-           yyy_new(n1_new, n2_new, n3_new), &
-           zzz_new(n1_new, n2_new, n3_new), stat=io_status)
-  if (io_status /= 0) stop "Errore: impossibile allocare memoria per la griglia ridotta."
-  xxx_new = xxx(1::i_stride, 1::j_stride, 1::k_stride)
-  yyy_new = yyy(1::i_stride, 1::j_stride, 1::k_stride)
-  zzz_new = zzz(1::i_stride, 1::j_stride, 1::k_stride)
-
-  ! Deallocazione degli array originali non più necessari
-  deallocate(xxx, yyy, zzz)
-
-  ! Scrittura del nuovo file della griglia sottocampionato
-  open(unit=out_unit, file=trim(grid_out_file), form='unformatted', status='replace', &
-       action='write', iostat=io_status)
-  if (io_status /= 0) stop "Errore: impossibile creare il file di output della griglia."
-  write(out_unit) 1
-  write(out_unit) n1_new, n2_new, n3_new
-  write(out_unit) xxx_new, yyy_new, zzz_new
-  close(out_unit)
-
-  deallocate(xxx_new, yyy_new, zzz_new)
-
-  write(*, '(a, a)') "   File griglia ridotta creato: ", trim(grid_out_file)
-  write(*, *)
+  grid_in_file  = 'grid.xyz'
+  grid_out_file = 'subgrid.xyz'
 
   ! ===========================================================================
   ! 3. Processa il file dei dati (.q)
@@ -150,9 +106,8 @@ program subsample_data
        action='read', iostat=io_status)
   if (io_status /= 0) stop "Errore: impossibile aprire il file di input dei dati."
   read(in_unit) dummy_int
-  read(in_unit) n1_check, n2_check, n3_check
-  ! Verifica che le dimensioni siano consistenti con il file della griglia
-  if (n1_check /= n1 .or. n2_check /= n2 .or. n3_check /= n3) stop "Errore: Le dimensioni nel file .q non corrispondono a quelle del file grid.xyz."
+  read(in_unit) n1, n2, n3
+  write(*, '(a, 3(i0, a))') "   Dimensioni griglia originale: (", n1, ", ", n2, ", ", n3, ")"
   read(in_unit) epsil, epsil, re, sim_time
   allocate(E(n1, n2, n3), vx(n1, n2, n3), vy(n1, n2, n3), &
           vz(n1, n2, n3), pr(n1, n2, n3), stat=io_status)
@@ -160,7 +115,11 @@ program subsample_data
   read(in_unit) E, vx, vy, vz, pr
   close(in_unit)
 
-  ! Sottocampionamento dei 5 array
+  ! Esecuzione del sottocampionamento tramite "array slicing"
+  n1_new = size(E(1::i_stride, 1, 1))
+  n2_new = size(E(1, 1::j_stride, 1))
+  n3_new = size(E(1, 1, 1::k_stride))
+  write(*, '(a, 3(i0, a))') "   Dimensioni griglia ridotta:   (", n1_new, ", ", n2_new, ", ", n3_new, ")"
   allocate(E_new(n1_new, n2_new, n3_new),  &
            vx_new(n1_new, n2_new, n3_new), &
            vy_new(n1_new, n2_new, n3_new), &
@@ -172,7 +131,8 @@ program subsample_data
   vy_new = vy(1::i_stride, 1::j_stride, 1::k_stride)
   vz_new = vz(1::i_stride, 1::j_stride, 1::k_stride)
   pr_new = pr(1::i_stride, 1::j_stride, 1::k_stride)
-  
+
+  ! Deallocazione degli array originali non più necessari
   deallocate(E, vx, vy, vz, pr)
 
   ! Scrittura del nuovo file dei dati sottocampionato
@@ -189,6 +149,127 @@ program subsample_data
 
   write(*, '(a, a)') "   File dati ridotti creato: ", trim(data_out_file)
   write(*, *)
+
+  ! ===========================================================================
+  ! 4. Processa il file della griglia (grid.xyz)
+  ! ===========================================================================
+  call yn_input(sample_grid, "Processare anche il file della griglia?", .true.)
+  if (sample_grid) then
+    write(*, '(a, a)') "-> Processando il file della griglia: ", trim(grid_in_file)
+    open(unit=in_unit, file=trim(grid_in_file), form='unformatted', status='old', &
+        action='read', iostat=io_status)
+    if (io_status /= 0) stop "Errore: impossibile aprire il file di input della griglia."
+    read(in_unit) dummy_int
+    read(in_unit) n1_check, n2_check, n3_check
+    ! Verifica che le dimensioni siano consistenti con il file della griglia
+    if (n1_check /= n1 .or. n2_check /= n2 .or. n3_check /= n3) stop "Errore: Le dimensioni nel file grid.xyz non corrispondono a quelle del file dati."
+    allocate(xxx(n1, n2, n3), yyy(n1, n2, n3), zzz(n1, n2, n3), stat=io_status)
+    if (io_status /= 0) stop "Errore: impossibile allocare memoria per la griglia completa."
+    read(in_unit) xxx, yyy, zzz
+    close(in_unit)
+
+    ! Sottocampionamento della griglia
+    allocate(xxx_new(n1_new, n2_new, n3_new), &
+            yyy_new(n1_new, n2_new, n3_new), &
+            zzz_new(n1_new, n2_new, n3_new), stat=io_status)
+    if (io_status /= 0) stop "Errore: impossibile allocare memoria per la griglia ridotta."
+    xxx_new = xxx(1::i_stride, 1::j_stride, 1::k_stride)
+    yyy_new = yyy(1::i_stride, 1::j_stride, 1::k_stride)
+    zzz_new = zzz(1::i_stride, 1::j_stride, 1::k_stride)
+    
+    deallocate(xxx, yyy, zzz)
+
+    ! Scrittura del nuovo file della griglia sottocampionato
+    open(unit=out_unit, file=trim(grid_out_file), form='unformatted', status='replace', &
+        action='write', iostat=io_status)
+    if (io_status /= 0) stop "Errore: impossibile creare il file di output della griglia."
+    write(out_unit) 1
+    write(out_unit) n1_new, n2_new, n3_new
+    write(out_unit) xxx_new, yyy_new, zzz_new
+    close(out_unit)
+
+    deallocate(xxx_new, yyy_new, zzz_new)
+
+    write(*, '(a, a)') "   File griglia ridotta creato: ", trim(grid_out_file)
+  end if
+  
+  write(*, *)
   write(*, *) "Operazione completata con successo."
+
+contains
+
+  ! --- Subroutine per ottenere la scelta y/n con default ---
+  subroutine yn_input(choice, question, default)
+    implicit none
+    logical, intent(out)            :: choice
+    character(len=*), intent(in)    :: question
+    logical, optional, intent(in)   :: default
+
+    character(len=100)  :: user_input
+    logical             :: choice_made
+    character(len=3)    :: default_answer
+    character(len=5)    :: yn_answer
+
+    if (present(default)) then
+      if (default) then
+        default_answer = "sì"
+        yn_answer = "[S/n]"
+      else
+        default_answer = "no"
+        yn_answer = "[s/N]"
+      end if
+    else
+      yn_answer = "[s/n]"
+    end if
+
+    choice_made = .false.
+
+    do while (.not. choice_made)
+      write(*, '(a, a, a, a)', advance='no') question, " ", yn_answer, "  "
+      read(*, '(a)', iostat=io_status) user_input
+      ! Controlla se l'input è stato letto correttamente
+      if (io_status /= 0) then
+        write(*, '(a)') "Errore nella lettura dell'input."
+        if (present(default)) then
+          write(*, '(a, a, a)') "Imposto ", default_answer, " come predefinito."
+          choice = default
+          choice_made = .true.
+        end if
+      else
+        ! Pulisce e normalizza l'input
+        user_input = trim(adjustl(user_input))
+
+        ! Gestione della risposta predefinita (se l'input è vuoto)
+        if (len_trim(user_input) == 0) then
+          if (present(default)) then
+            choice = default
+            choice_made = .true.
+          else
+            write(*, '(a)') "Errore nella lettura dell'input."
+          end if
+        else
+          ! Analizza l'input dell'utente
+          select case (user_input(1:1))
+            case ('s')
+              choice = .true.
+              choice_made = .true.
+            case ('S')
+              choice = .true.
+              choice_made = .true.
+            case ('n')
+              choice = .false.
+              choice_made = .true.
+            case ('N')
+              choice = .false.
+              choice_made = .true.
+            case default
+              ! Questo caso non dovrebbe essere raggiunto se la logica della subroutine è corretta
+              write(*, '(a)') "Scelta non valida. Inserisci solo sì/no."
+          end select
+        end if
+      end if
+    end do ! Fine del ciclo do while
+
+  end subroutine yn_input
 
 end program subsample_data
