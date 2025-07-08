@@ -3,6 +3,8 @@ c     parameter (m1=1537,m2=129,m3=769,ndd=2,ndv=3)   ! bigger
 c     parameter (m1=1025,m2=257,m3=513,ndd=2,ndv=3)   ! thock
 c     parameter (m1=1025,m2=129,m3=513,ndd=2,ndv=3)   ! thick
       parameter (m1=1025,m2=65,m3=513,ndd=2,ndv=3)    ! big
+c     parameter (m1=2049,m2=65,m3=1025,ndd=2,ndv=3)   ! thin
+c     parameter (m1=4097,m2=17,m3=2049,ndd=2,ndv=3)   ! shallow
 c     parameter (m1=513,m2=33,m3=257,ndd=2,ndv=3)     ! small
 c     parameter (m1=257,m2=17,m3=129,ndd=2,ndv=3)     ! little
       parameter (m1m=m1-1,m2m=m2-1,m3m=m3-1)
