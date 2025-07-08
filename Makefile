@@ -15,7 +15,7 @@ ifeq ($(COMP),GNU)
 else
 	FC = ifx
 	OP_COMP = -r8
-	OP_COMP = -mcmodel=large -heap-arrays
+	OP_COMP += -mcmodel=large -heap-arrays
 endif
 #----------------------------------------
 ifeq ($(OPTM),DEBUG)
@@ -23,7 +23,7 @@ ifeq ($(OPTM),DEBUG)
 	ifeq ($(COMP),GNU)
 		OP_COMP += -ggdb -O0 -Wall -fbacktrace -frecursive -ffpe-trap=invalid,zero #,overflow,underflow
 	else
-		OP_COMP = -g -O0 -traceback -warn all,extra -check all -check pointers -init=snan -fpe0
+		OP_COMP += -g -O0 -traceback -warn all,extra -check all -check pointers -init=snan -fpe0
 	endif
 else
 # parallelo e ottimizzato
