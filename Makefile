@@ -9,7 +9,7 @@ COMP = GNU
 # FC = f77
 # FC = xlf
 ifeq ($(COMP),GNU)
-	FC = gfortran
+	FC = gfortran -std=legacy
 	OP_COMP = -fdefault-real-8
 	OP_COMP += -mcmodel=large
 else
