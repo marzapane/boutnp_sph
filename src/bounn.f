@@ -1259,6 +1259,8 @@ c***********************************************************************
       close(39)
       return
       end
+c
+c
 c***********************************************************************
       subroutine cfl(cflm)
       include'param.f'
@@ -1283,6 +1285,37 @@ c
 !$OMP  END PARALLEL DO
       return
       end
+c
+c
+c***********************************************************************
+      subroutine dtchk
+      include'param.f'
+c
+      real qcf,cflm
+      integer i,j,k,ip,jp,kp,ii,jj,kk
+c
+      cflm=-1.
+      do 17 k=1,n3m
+        kp=k+1
+        do 17 j=1,n2m
+          jp=j+1
+          do 17 i=1,n1m
+            ip=ipv(i)
+            qcf=((
+     %           +abs((q2(i,j,k)+q2(i,jp,k))*0.5*udx2rm(j)))
+     %           +abs((q3(i,j,k)+q3(i,j,kp))*0.5*udx3m(k)))
+            if (qcf.gt.cflm) then
+              cflm = qcf
+              ii = i
+              jj = j
+              kk = k
+            endif
+  17  continue
+      write(6,868) thetam(ii),rm(jj),zm(kk)
+      write(32,868) thetam(ii),rm(jj),zm(kk)
+  868 format(10x,'field max at theta=',f5.2,', r=',f5.2,', phi=',f5.2)
+      end
+c
 c
 c***********************************************************************
       subroutine outpf(time)

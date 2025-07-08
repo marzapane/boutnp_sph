@@ -263,8 +263,8 @@ c
             if(dt.gt.dtmax) dt=dtmax
           endif
           if(dt.lt.1E-16) go to 166
-          else
-            cflm=cflm*dt
+        else
+          cflm=cflm*dt
           if(cflm.gt.cfllim) go to 165
         endif
         beta=dt/ren*0.5
@@ -335,6 +335,8 @@ c
       write(6,168) dt
       write(32,168) dt
   168 format(10x,'too small dt = ',e14.7)
+      call dtchk
+      call outpf(time)
       go to 167
   266 continue
       write(6,268)
