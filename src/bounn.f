@@ -1277,9 +1277,9 @@ c
           jp=j+1
           do 7 i=1,n1m
             ip=ipv(i)
-            qcf=((
-     %           +abs((q2(i,j,k)+q2(i,jp,k))*0.5*udx2rm(j)))
-     %           +abs((q3(i,j,k)+q3(i,j,kp))*0.5*udx3m(k)))
+            qcf=(abs((q1(i,j,k)+q1(ip,j,k))*0.5*dx1)
+     %          +abs((q2(i,j,k)+q2(i,jp,k))*0.5*udx2m(j))
+     %          +abs((q3(i,j,k)+q3(i,j,kp))*0.5*udx3m(k)))
             cflm = max(cflm,qcf)
   7   continue
 !$OMP  END PARALLEL DO
@@ -1301,9 +1301,9 @@ c
           jp=j+1
           do 17 i=1,n1m
             ip=ipv(i)
-            qcf=((
-     %           +abs((q2(i,j,k)+q2(i,jp,k))*0.5*udx2rm(j)))
-     %           +abs((q3(i,j,k)+q3(i,j,kp))*0.5*udx3m(k)))
+            qcf=(abs((q1(i,j,k)+q1(ip,j,k))*0.5*dx1)
+     %          +abs((q2(i,j,k)+q2(i,jp,k))*0.5*udx2m(j))
+     %          +abs((q3(i,j,k)+q3(i,j,kp))*0.5*udx3m(k)))
             if (qcf.gt.cflm) then
               cflm = qcf
               ii = i
