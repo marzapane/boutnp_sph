@@ -495,14 +495,14 @@ c    %               +densit*(rc(jc)/rc(n2))     !self-gravitating sphere
 c
 c     add the random forcing term
 c
-      if(iforc.eq.1) then
-        forc = forc_mod * rc(jc)**2
-     %        * sin(om_tape * (thetam(ic)+ph_th))
-     %        * sin(om_r*r_rad + ph_r)
-c    %        * (rc(jc)-r_min)/(r_max-r_min)
-     %        * cos(om_z * zm(kc) + ph_z)
-        dph(ic,jc,kc) = dph(ic,jc,kc) + forc !simple oscillating random forcing
-      end if
+c       if(iforc.eq.1) then
+c         forc = forc_mod * rc(jc)**2
+c      %        * sin(om_tape * (thetam(ic)+ph_th))
+c      %        * sin(om_r*r_rad + ph_r)
+c c    %        * (rc(jc)-r_min)/(r_max-r_min)
+c      %        * cos(om_z * zm(kc) + ph_z)
+c         dph(ic,jc,kc) = dph(ic,jc,kc) + forc !simple oscillating random forcing
+c       end if
 
    20 continue
 !$OMP  END PARALLEL DO
