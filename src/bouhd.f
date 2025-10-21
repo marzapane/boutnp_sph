@@ -88,7 +88,7 @@ c
       pi = 2. * asin (1.)
       r_max = rc(n2)
       r_min = rc(1)
-      piddr = pi / (r_max - r_min)
+c     piddr = pi / (r_max - r_min)
 
 c     definition of the random coeff. for the forcing
 
@@ -97,22 +97,22 @@ c     call random_number(rand)
       forc_mod = forc_scale * rand
       cntr = n1m/16.
       ampl = n1m/64.
-      ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
-      amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
+c     ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
+c     amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
       call random_number(rand)
       om_th = nint(cntr - ampl/2 + rand*ampl)
       call random_number(rand)
       rand = cntr - ampl/2 + rand*ampl
       om_z = nint(rand/2)*2 ! closest even number
-      call random_number(rand)
-      rand = ctr_r - amp_r/2 + rand*amp_r
-      om_r = nint((rand - 1)/2)*2 + 1 ! closest odd number
+c     call random_number(rand)
+c     rand = ctr_r - amp_r/2 + rand*amp_r
+c     om_r = nint((rand - 1)/2)*2 + 1 ! closest odd number
       call random_number(rand)
       ph_th = rand * 2*pi
       call random_number(rand)
       ph_z = rand * 2*pi
-      call random_number(rand)
-      ph_r = rand * 2*pi
+c     call random_number(rand)
+c     ph_r = rand * 2*pi
 
       ivisc1=1
       small = 1.e-10
@@ -147,7 +147,7 @@ c     call random_number(rand)
       udx1nl = usrm(jc)*usinpm(kc)*dx1*0.25
       fact2  = usrm(jc)*usinpm(kc)
       fact3  = usrm(jc)*usinpm(kc)*utanpm(kc)
-      r_rad = (rm(jc)-r_min) * piddr
+c     r_rad = (rm(jc)-r_min) * piddr
       do 10 ic=1,n1m
       ip=ipv(ic)
       im=imv(ic)
@@ -291,7 +291,7 @@ c
       if(iforc.eq.1) then
         forc = forc_mod
      %        * sin(om_tape*(thetac(ic) + ph_th))
-     %        * sin(om_r*r_rad + ph_r)
+c    %        * sin(om_r*r_rad + ph_r)
 c    %        * (rm(jc)-r_min)/(r_max-r_min)
      %        * cos(om_z*zm(kc) + ph_z)
         dq(ic,jc,kc) = dq(ic,jc,kc) + forc !simple oscillating random forcing
@@ -315,34 +315,34 @@ c
       real ph_th,ph_z,ph_r,forc_mod
       real cntr,ampl,ctr_r,amp_r,pi,r_max,r_min
       real piddr,rand,om_tape,r_rad
-      pi = 2. * asin (1.)
-      r_max = rc(n2)
-      r_min = rc(1)
-      piddr = pi / (r_max - r_min)
+c     pi = 2. * asin (1.)
+c     r_max = rc(n2)
+c     r_min = rc(1)
+c     piddr = pi / (r_max - r_min)
 
 c     definition of the random coeff. for the forcing
 
-      rand = 1.
+c     rand = 1.
 c     call random_number(rand)
-      forc_mod = forc_scale * rand
-      cntr = n1m/16.
-      ampl = n1m/64.
-      ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
-      amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
-      call random_number(rand)
-      om_th = nint(cntr - ampl/2 + rand*ampl)
-      call random_number(rand)
-      rand = cntr - ampl/2 + rand*ampl
-      om_z = nint(rand/2)*2 ! closest even number
-      call random_number(rand)
-      rand = ctr_r - amp_r/2 + rand*amp_r
-      om_r = nint((rand - 1)/2)*2 + 1 ! closest odd number
-      call random_number(rand)
-      ph_th = rand * 2*pi
-      call random_number(rand)
-      ph_z = rand * 2*pi
-      call random_number(rand)
-      ph_r = rand * 2*pi
+c     forc_mod = forc_scale * rand
+c     cntr = n1m/16.
+c     ampl = n1m/64.
+c     ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
+c     amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
+c     call random_number(rand)
+c     om_th = nint(cntr - ampl/2 + rand*ampl)
+c     call random_number(rand)
+c     rand = cntr - ampl/2 + rand*ampl
+c     om_z = nint(rand/2)*2 ! closest even number
+c     call random_number(rand)
+c     rand = ctr_r - amp_r/2 + rand*amp_r
+c     om_r = nint((rand - 1)/2)*2 + 1 ! closest odd number
+c     call random_number(rand)
+c     ph_th = rand * 2*pi
+c     call random_number(rand)
+c     ph_z = rand * 2*pi
+c     call random_number(rand)
+c     ph_r = rand * 2*pi
 
       ivisc2=1
       icon = 0
@@ -376,7 +376,7 @@ c     call random_number(rand)
       jp=jc+1
       udx1 = dx1*0.25
       fact = usrc(jc)*usinpm(kc)
-      r_rad = (rc(jc)-r_min) * piddr
+c     r_rad = (rc(jc)-r_min) * piddr
       do 20 ic=1,n1m
       imm=imv(ic)
       ipp=ipv(ic)
@@ -523,7 +523,7 @@ c
       pi = 2. * asin (1.)
       r_max = rc(n2)
       r_min = rc(1)
-      piddr = pi / (r_max - r_min)
+c     piddr = pi / (r_max - r_min)
 
 c     definition of the random coeff. for the forcing
 
@@ -532,22 +532,22 @@ c     call random_number(rand)
       forc_mod = forc_scale * rand
       cntr = n1m/16.
       ampl = n1m/64.
-      ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
-      amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
+c     ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
+c     amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
       call random_number(rand)
       om_th = nint(cntr - ampl/2 + rand*ampl)
       call random_number(rand)
       rand = cntr - ampl/2 + rand*ampl
       om_z = nint(rand/2)*2 ! closest even number
-      call random_number(rand)
-      rand = ctr_r - amp_r/2 + rand*amp_r
-      om_r = nint((rand - 1)/2)*2 + 1 ! closest odd number
+c     call random_number(rand)
+c     rand = ctr_r - amp_r/2 + rand*amp_r
+c     om_r = nint((rand - 1)/2)*2 + 1 ! closest odd number
       call random_number(rand)
       ph_th = rand * 2*pi
       call random_number(rand)
       ph_z = rand * 2*pi
-      call random_number(rand)
-      ph_r = rand * 2*pi
+c     call random_number(rand)
+c     ph_r = rand * 2*pi
 
       ivisc3 = 1
       small = 1.e-10
@@ -581,7 +581,7 @@ c     km=kmv(kc)
       udx1=dx1*usrm(jc)*usinpc(kc)*0.25
       fact3 = utanpc(kc)*usrmq(jc)
       fact2 = sinpc(kc)*usrmq(jc)
-      r_rad = (rm(jc)-r_min) * piddr
+c     r_rad = (rm(jc)-r_min) * piddr
       do 30 ic=1,n1m
       imm=imv(ic)
       ipp=ipv(ic)
@@ -707,7 +707,7 @@ c
         om_tape = nint(om_th*sin(zz(kc)))
         forc = forc_mod * sin(zz(kc))
      %        * sin(om_tape * (thetam(ic)+ph_th))
-     %        * sin(om_r*r_rad + ph_r)
+c    %        * sin(om_r*r_rad + ph_r)
 c    %        * (rm(jc)-r_min)/(r_max-r_min)
      %        * cos(om_z * zz(kc) + ph_z)
         qcap(ic,jc,kc) = qcap(ic,jc,kc) + forc
