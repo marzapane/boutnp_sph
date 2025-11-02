@@ -16,7 +16,11 @@ c***********************************************************************
         end do
       end do
       nspec=0
-      spec=0.0d0
+      do i = 1, n1md
+        do k = 1, n3m
+          spec(k,i) = 0.0d0
+        end do
+      end do
       end subroutine init_spec
 c
 c***********************************************************************
@@ -181,6 +185,9 @@ c
       write(39) time
       close(39)
       nspec=0
-      spec=0.0d0
-      return
+      do i = 1, n1md
+        do k = 1, n3m
+          spec(k,i) = 0.0d0
+        end do
+      end do
       end subroutine print_spec
