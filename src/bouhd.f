@@ -81,14 +81,11 @@ c***********************************************************************
 c
 c     h term for the q1 momentum equation at i,j+1/2,k+1/2
 c
-      integer om_th,om_z,om_r
-      real ph_th,ph_z,ph_r,forc_mod
-      real cntr,ampl,ctr_r,amp_r,pi,r_max,r_min
-      real piddr,rand,om_tape,r_rad
+      integer om_th,om_z
+      real ph_th,ph_z,forc_mod
+      real cntr,ampl,pi
+      real rand,om_tape
       pi = 2. * asin (1.)
-      r_max = rc(n2)
-      r_min = rc(1)
-c     piddr = pi / (r_max - r_min)
 
 c     definition of the random coeff. for the forcing
 
@@ -97,22 +94,15 @@ c     call random_number(rand)
       forc_mod = forc_scale * rand
       cntr = n1m/16.
       ampl = n1m/64.
-c     ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
-c     amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
       call random_number(rand)
       om_th = nint(cntr - ampl/2 + rand*ampl)
       call random_number(rand)
       rand = cntr - ampl/2 + rand*ampl
       om_z = nint(rand/2)*2 ! closest even number
-c     call random_number(rand)
-c     rand = ctr_r - amp_r/2 + rand*amp_r
-c     om_r = nint((rand - 1)/2)*2 + 1 ! closest odd number
       call random_number(rand)
       ph_th = rand * 2*pi
       call random_number(rand)
       ph_z = rand * 2*pi
-c     call random_number(rand)
-c     ph_r = rand * 2*pi
 
       ivisc1=1
       small = 1.e-10
@@ -126,14 +116,13 @@ c     ph_r = rand * 2*pi
 !$OMP$ SHARED(dq,q1,q2,q3,dens)
 !$OMP$ SHARED(dx1,dx2,dx3,udx3m,udx1vis1,udx1vis3)
 !$OMP$ SHARED(fvisc,ivisc1,usros,icorio,ibuo,iforc)
-!$OMP$ SHARED(forc_mod,om_th,om_z,om_r,ph_th,ph_z,ph_r)
-!$OMP$ SHARED(r_min,piddr)
+!$OMP$ SHARED(forc_mod,om_th,om_z,ph_th,ph_z)
 !$OMP$ PRIVATE(kc,kmm,kpp,kp,jc,jmm,jpp,jp,jm,ic,ip,im)
 !$OMP$ PRIVATE(udx1nl,fact2,fact3,insy,insym,knsy)
 !$OMP$ PRIVATE(ksm,ksy,ism,ismm,q3sy,q3sym,q3s,q3sm)
 !$OMP$ PRIVATE(q2e,q2w,d11q2e,q3e,q3w,d11q3e)
 !$OMP$ PRIVATE(h11,h12,h13,h12n,h13n,hq1,coriol,densit)
-!$OMP$ PRIVATE(forc,om_tape,r_rad)
+!$OMP$ PRIVATE(forc,om_tape)
       do 10 kc=1,n3m
       kmm=kmv(kc)
       kpp=kpv(kc)
@@ -147,7 +136,6 @@ c     ph_r = rand * 2*pi
       udx1nl = usrm(jc)*usinpm(kc)*dx1*0.25
       fact2  = usrm(jc)*usinpm(kc)
       fact3  = usrm(jc)*usinpm(kc)*utanpm(kc)
-c     r_rad = (rm(jc)-r_min) * piddr
       do 10 ic=1,n1m
       ip=ipv(ic)
       im=imv(ic)
@@ -291,8 +279,6 @@ c
       if(iforc.eq.1) then
         forc = forc_mod
      %        * sin(om_tape*(thetac(ic) + ph_th))
-c    %        * sin(om_r*r_rad + ph_r)
-c    %        * (rm(jc)-r_min)/(r_max-r_min)
      %        * cos(om_z*zm(kc) + ph_z)
         dq(ic,jc,kc) = dq(ic,jc,kc) + forc !simple oscillating random forcing
       end if
@@ -311,39 +297,6 @@ c***********************************************************************
 c
 c     h term for the q2 momentum equation at i+1/2,j,k+1/2
 c
-      integer om_th,om_z,om_r
-      real ph_th,ph_z,ph_r,forc_mod
-      real cntr,ampl,ctr_r,amp_r,pi,r_max,r_min
-      real piddr,rand,om_tape,r_rad
-c     pi = 2. * asin (1.)
-c     r_max = rc(n2)
-c     r_min = rc(1)
-c     piddr = pi / (r_max - r_min)
-
-c     definition of the random coeff. for the forcing
-
-c     rand = 1.
-c     call random_number(rand)
-c     forc_mod = forc_scale * rand
-c     cntr = n1m/16.
-c     ampl = n1m/64.
-c     ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
-c     amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
-c     call random_number(rand)
-c     om_th = nint(cntr - ampl/2 + rand*ampl)
-c     call random_number(rand)
-c     rand = cntr - ampl/2 + rand*ampl
-c     om_z = nint(rand/2)*2 ! closest even number
-c     call random_number(rand)
-c     rand = ctr_r - amp_r/2 + rand*amp_r
-c     om_r = nint((rand - 1)/2)*2 + 1 ! closest odd number
-c     call random_number(rand)
-c     ph_th = rand * 2*pi
-c     call random_number(rand)
-c     ph_z = rand * 2*pi
-c     call random_number(rand)
-c     ph_r = rand * 2*pi
-
       ivisc2=1
       icon = 0
       usros = 1./ros
@@ -355,28 +308,23 @@ c     ph_r = rand * 2*pi
 !$OMP$ SHARED(qaxN,qaxS,ren)
 !$OMP$ SHARED(dph,q1,q2,q3,dens)
 !$OMP$ SHARED(dx1,dx3,udx2c,udx3m)
-!$OMP$ SHARED(fvisc,ivisc2,usros,icorio,ibuo,iforc)
-!$OMP$ SHARED(forc_mod,om_th,om_z,om_r,ph_th,ph_z,ph_r)
-!$OMP$ SHARED(r_min,piddr)
+!$OMP$ SHARED(fvisc,ivisc2,usros,icorio,ibuo)
 !$OMP$ PRIVATE(kc,kmm,kpp,kp,jc,jp,jm,ic,imm,ipp)
 !$OMP$ PRIVATE(udx1,fact,fact2,fact3,insy,knsy)
 !$OMP$ PRIVATE(ksm,ism,q3sy,q3sym,q3s,q3n)
 !$OMP$ PRIVATE(q1e,q1w,d11q1v,d33q3v)
 !$OMP$ PRIVATE(h21,h22,h23,h11n,h33n,hq2,coriol,densit)
-!$OMP$ PRIVATE(forc,om_tape,r_rad)
       do 20 kc=1,n3m
       kmm=kmv(kc)
       kpp=kpv(kc)
       kp=kc+1
       fact2 = usinpm(kc)**2
       fact3 = usinpm(kc)
-      om_tape = nint(om_th*sin(zm(kc)))
       do 20 jc=2,n2m
       jm=jc-1
       jp=jc+1
       udx1 = dx1*0.25
       fact = usrc(jc)*usinpm(kc)
-c     r_rad = (rc(jc)-r_min) * piddr
       do 20 ic=1,n1m
       imm=imv(ic)
       ipp=ipv(ic)
@@ -493,16 +441,8 @@ c    %               +densit                     !gravita' costante
 c    %               +densit*(rc(jc)/rc(n2))     !self-gravitating sphere
 
 c
-c     add the random forcing term
+c     no forcing on the radial axis
 c
-c       if(iforc.eq.1) then
-c         forc = forc_mod * rc(jc)**2
-c      %        * sin(om_tape * (thetam(ic)+ph_th))
-c      %        * sin(om_r*r_rad + ph_r)
-c c    %        * (rc(jc)-r_min)/(r_max-r_min)
-c      %        * cos(om_z * zm(kc) + ph_z)
-c         dph(ic,jc,kc) = dph(ic,jc,kc) + forc !simple oscillating random forcing
-c       end if
 
    20 continue
 !$OMP  END PARALLEL DO
@@ -516,14 +456,11 @@ c***********************************************************************
 c
 c     h term for the q3 momentum equation at i+1/2,j+1/2,k
 c
-      integer om_th,om_z,om_r
-      real ph_th,ph_z,ph_r,forc_mod
-      real cntr,ampl,ctr_r,amp_r,pi,r_max,r_min
-      real piddr,rand,om_tape,r_rad
+      integer om_th,om_z
+      real ph_th,ph_z,forc_mod
+      real cntr,ampl,pi
+      real rand,om_tape
       pi = 2. * asin (1.)
-      r_max = rc(n2)
-      r_min = rc(1)
-c     piddr = pi / (r_max - r_min)
 
 c     definition of the random coeff. for the forcing
 
@@ -532,22 +469,15 @@ c     call random_number(rand)
       forc_mod = forc_scale * rand
       cntr = n1m/16.
       ampl = n1m/64.
-c     ctr_r = cntr * (r_max/r_min - 1.) / (2*pi)
-c     amp_r = ampl * (r_max/r_min - 1.) / (2*pi)
       call random_number(rand)
       om_th = nint(cntr - ampl/2 + rand*ampl)
       call random_number(rand)
       rand = cntr - ampl/2 + rand*ampl
       om_z = nint(rand/2)*2 ! closest even number
-c     call random_number(rand)
-c     rand = ctr_r - amp_r/2 + rand*amp_r
-c     om_r = nint((rand - 1)/2)*2 + 1 ! closest odd number
       call random_number(rand)
       ph_th = rand * 2*pi
       call random_number(rand)
       ph_z = rand * 2*pi
-c     call random_number(rand)
-c     ph_r = rand * 2*pi
 
       ivisc3 = 1
       small = 1.e-10
@@ -562,13 +492,12 @@ c     ph_r = rand * 2*pi
 !$OMP$ SHARED(qcap,q1,q2,q3,dens)
 !$OMP$ SHARED(dx1,dx2,dx3)
 !$OMP$ SHARED(fvisc,ivisc3,usros,icorio,ibuo,iforc)
-!$OMP$ SHARED(forc_mod,om_th,om_z,om_r,ph_th,ph_z,ph_r)
-!$OMP$ SHARED(r_min,piddr)
+!$OMP$ SHARED(forc_mod,om_th,om_z,ph_th,ph_z)
 !$OMP$ PRIVATE(kc,km,kp,jc,jmm,jpp,jp,ic,ipp,imm)
 !$OMP$ PRIVATE(sudx1vis2,sudx1vis3,udx1,fact2,fact3,insy)
 !$OMP$ PRIVATE(q3km,q3kp,q1e,q1w,d11q1v,q2s,q2n,d11q2v)
 !$OMP$ PRIVATE(h31,h32,h33,h23n,h11n,hq3,coriol,densit)
-!$OMP$ PRIVATE(forc,om_tape,r_rad)
+!$OMP$ PRIVATE(forc,om_tape)
       do 30 kc=2,n3m
 c     km=kmv(kc)
       km=kc-1
@@ -581,7 +510,6 @@ c     km=kmv(kc)
       udx1=dx1*usrm(jc)*usinpc(kc)*0.25
       fact3 = utanpc(kc)*usrmq(jc)
       fact2 = sinpc(kc)*usrmq(jc)
-c     r_rad = (rm(jc)-r_min) * piddr
       do 30 ic=1,n1m
       imm=imv(ic)
       ipp=ipv(ic)
@@ -707,8 +635,6 @@ c
         om_tape = nint(om_th*sin(zz(kc)))
         forc = forc_mod * sin(zz(kc))
      %        * sin(om_tape * (thetam(ic)+ph_th))
-c    %        * sin(om_r*r_rad + ph_r)
-c    %        * (rm(jc)-r_min)/(r_max-r_min)
      %        * cos(om_z * zz(kc) + ph_z)
         qcap(ic,jc,kc) = qcap(ic,jc,kc) + forc
       end if
