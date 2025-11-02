@@ -180,5 +180,7 @@ c
       write(39) (((spec(k,i)/nspec),k=1,n3m),i=1,n1mh)
       write(39) time
       close(39)
+      nspec=0
+      spec=0.0d0
       return
       end subroutine print_spec
