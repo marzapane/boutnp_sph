@@ -2,6 +2,23 @@
 # To use import the library using the following command:
 # exec(open('/home/bilottos/Documents/PhD/Thesis_project/Programs/boutnp_sph_parallel/code/src/utils.py').read())
 
+def fndlst(
+    directory,
+    pattern,
+    idx=-1,
+):
+    parts = pattern.split('*')
+    if len(parts) != 2:
+        raise ValueError(f"Invalid pattern '{pattern}': Must contain exactly one '*'")
+    bgn = len(parts[0])
+    end = -len(parts[1]) if parts[1] else None
+    files = sorted(directory.glob(pattern),
+                        key = lambda path: int(path.name[bgn:end])
+                    )
+    if not files:
+        return None
+    return files[idx]
+
 def readfbin(filePath):
     with open(filePath, 'rb') as f:
         _ = np.fromfile(f, dtype=np.int32, count=1)
@@ -107,7 +124,7 @@ def plotSpctr(spctr, modes, univScal=False, savePath=None):
         eps = (modes**2 * spctr).sum(axis=1)
         eta = eps**(-1/4)
         for i in range(0, n3h):
-            plt.loglog(modes[i,1:]*eta[i],(spctr[i,1:]/eps[i]**(1/4)+spctr[n3-1-i,1:]/eps[n3-i]**(1/4))/2, c=infernoCmap(i/n3h))
+            plt.loglog(modes[i,1:]*eta[i],(spctr[i,1:]/eps[i]**(1/4)+spctr[n3-1-i,1:]/eps[n3-1-i]**(1/4))/2, c=infernoCmap(i/n3h))
         plt.xlabel(r'$k\,\eta$')
         plt.ylabel(r'$E(k)\,\epsilon^{-1/4}$')
         plt.plot(modes[n3h,1:]*eta[n3h],1e-1*(modes[n3h,1:]*eta[n3h])**(-5/3), label=r'$k^{-5/3}$')
@@ -117,7 +134,7 @@ def plotSpctr(spctr, modes, univScal=False, savePath=None):
         plt.xlabel(r'$k$')
         plt.ylabel(r'$E(k)$')
         plt.plot(modes[n3h,1:],1e-1*modes[n3h,1:]**(-5/3), label=r'$k^{-5/3}$')
-    sm = plt.cm.ScalarMappable(cmap=infernoCmap, norm=plt.Normalize(vmin=0,vmax=np.pi))
+    sm = plt.cm.ScalarMappable(cmap=infernoCmap, norm=plt.Normalize(vmin=0,vmax=90))
     plt.colorbar(sm, label='polar angle [degrees]').ax.invert_yaxis()
     if savePath is None:
         plt.show()
@@ -151,7 +168,7 @@ def fitMinMax(spctr, modes, i):
     plt.legend()
     plt.show()
 
-# modes, spctr = readSpctr(wdir / 'free/12/spctr080000.bin')
+# modes, spctr = readSpctr(fndlst(wdir/'free/12/', 'spctr*.bin'))
 # plotSpctr(spctr, modes)
 # fitMinMax(spctr, modes, 128)
 
@@ -165,11 +182,11 @@ def avgSpctr(spctr, modes):
     return avgModes, avgSpctr
 
 # # Plot rescaled energy spectrum
-# modes, spctr = readSpctr(wdir / 'free/12/spctr007500.bin');   plt.loglog(*avgSpctr(spctr,       modes), label='1:2')
-# modes, spctr = readSpctr(wdir / 'free/34/spctr046000.bin');   plt.loglog(*avgSpctr(spctr/3**2,  modes), label='3:4')
-# modes, spctr = readSpctr(wdir / 'free/89/spctr046000.bin');   plt.loglog(*avgSpctr(spctr/8**2,  modes), label='8:9')
-# modes, spctr = readSpctr(wdir / 'free/1920/spctr070000.bin'); plt.loglog(*avgSpctr(spctr/19**2, modes), label='19:20')
-# modes, spctr = readSpctr(wdir / 'free/4950/spctr066000.bin'); plt.loglog(*avgSpctr(spctr/49**2, modes), label='49:50')
+# modes, spctr = readSpctr(fndlst(wdir/'free/12/', 'spctr*.bin'));   plt.loglog(*avgSpctr(spctr,       modes), label='1:2')
+# modes, spctr = readSpctr(fndlst(wdir/'free/34/', 'spctr*.bin'));   plt.loglog(*avgSpctr(spctr/3**2,  modes), label='3:4')
+# modes, spctr = readSpctr(fndlst(wdir/'free/89/', 'spctr*.bin'));   plt.loglog(*avgSpctr(spctr/8**2,  modes), label='8:9')
+# modes, spctr = readSpctr(fndlst(wdir/'free/1920/', 'spctr*.bin')); plt.loglog(*avgSpctr(spctr/19**2, modes), label='19:20')
+# modes, spctr = readSpctr(fndlst(wdir/'free/4950/', 'spctr*.bin')); plt.loglog(*avgSpctr(spctr/49**2, modes), label='49:50')
 # n3h = int(modes.shape[0] / 2)
 # plt.plot(modes[n3h,1:],1e-1*modes[n3h,1:]**(-5/3), label=r'$k^{-5/3}$')
 # plt.xlabel(r'$k$')
@@ -178,11 +195,11 @@ def avgSpctr(spctr, modes):
 # plt.show()
 
 # # Plot energy VS time
-# data = np.genfromtxt(wdir / 'free/12/enerv.out').T;   plt.plot(data[0], data[1],       label='1:2')
-# data = np.genfromtxt(wdir / 'free/34/enerv.out').T;   plt.plot(data[0], data[1]/3**2,  label='3:4')
-# data = np.genfromtxt(wdir / 'free/89/enerv.out').T;   plt.plot(data[0], data[1]/8**2,  label='8:9')
-# data = np.genfromtxt(wdir / 'free/1920/enerv.out').T; plt.plot(data[0], data[1]/19**2, label='19:20')
-# data = np.genfromtxt(wdir / 'free/4950/enerv.out').T; plt.plot(data[0], data[1]/49**2, label='49:50')
+# data = np.genfromtxt(wdir/'free/12/enerv.out').T;   plt.plot(data[0], data[1],       label='1:2')
+# data = np.genfromtxt(wdir/'free/34/enerv.out').T;   plt.plot(data[0], data[1]/3**2,  label='3:4')
+# data = np.genfromtxt(wdir/'free/89/enerv.out').T;   plt.plot(data[0], data[1]/8**2,  label='8:9')
+# data = np.genfromtxt(wdir/'free/1920/enerv.out').T; plt.plot(data[0], data[1]/19**2, label='19:20')
+# data = np.genfromtxt(wdir/'free/4950/enerv.out').T; plt.plot(data[0], data[1]/49**2, label='49:50')
 # plt.xlabel('$t$')
 # plt.ylabel('$E$')
 # plt.legend()
