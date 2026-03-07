@@ -73,7 +73,7 @@ c
         read(15,301) dummy
         read(15,*)strr,rext,rint,istr,rmed,etdp,strb
         read(15,301) dummy
-        read(15,*) ray,ri,ros,pra,dt,resid,cflmax
+        read(15,*) ray,ri,ros,pra,ekm,dt,resid,cflmax
         read(15,301) dummy
         read(15,*) inslwri,inslwr,ifugo,icorio,ibuo,isca,ivisc
         read(15,301) dummy
@@ -158,9 +158,10 @@ c
       write(32,112)2.*r0/alx3
   112 format(//,20x,'R A Y B E N ',//,10x,
      % 'Cilindro a rapporto d''aspetto:  D/H = ',f4.2)
-      write(6,202) ray,pra
-      write(32,202) ray,pra
-  202 format(/,5x,'Parametri: ',' Ray=',e10.3,' Pra= ',e10.3)
+      write(6,202) ray,pra,ekm
+      write(32,202) ray,pra,ekm
+  202 format(/,5x,'Parametri: ',
+     % ' Ray =',e10.3,' Pra = ',e10.3,' Ekm = ',e10.3)
       if(idtv.eq.1) then
          write(6,204) cflmax
          write(32,204) cflmax
