@@ -53,6 +53,8 @@ c
       program papero
       include'param.f'
       character*4 dummy
+      character*256 line_str
+      integer ios
 c
 c     timings
       real timef
@@ -73,7 +75,12 @@ c
         read(15,301) dummy
         read(15,*)strr,rext,rint,istr,rmed,etdp,strb
         read(15,301) dummy
-        read(15,*) ray,ri,ros,pra,ekm,dt,resid,cflmax
+        read(15,'(A)') line_str
+        read(line_str,*,iostat=ios) ray,ri,ros,pra,ekm,dt,resid,cflmax
+        if (ios .ne. 0) then
+          read(line_str,*) ray,ri,ros,pra,dt,resid,cflmax
+          ekm = 0.0 ! Default value if not present in bou.in
+        endif
         read(15,301) dummy
         read(15,*) inslwri,inslwr,ifugo,icorio,ibuo,isca,ivisc
         read(15,301) dummy
