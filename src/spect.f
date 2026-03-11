@@ -53,117 +53,92 @@ c sin(phi) factor simplifies between integration measure (sin(phi) dphi)
 c and field (v_phi = q3/sin(phi))
         pwm(k) = sinpm(k) * g3rm(k)/dx3
       end do
-c initialize xxr
-      do k = 1, n3m
-        do i = 1, n1md
-          xxr(i,k) = 0.0d0
-        end do
-      end do
 c average v_r in xxr
       do j = 1,n2
         do k = 1,n3m
-          xxr(1,k) = xxr(1,k) + q2(n1m,j,k)*rwc(j)*pwm(k)
+          do i = 1,n1md
+            xxr(i,k) = 0.0d0
+          end do
+          xxr(1,k) = q2(n1m,j,k)/rc(j)**2
           do i = 1,n1m
             is = i+1
-            xxr(is,k) = xxr(is,k) + q2(i,j,k)*rwc(j)*pwm(k)
+            xxr(is,k) = q2(i,j,k)/rc(j)**2
           end do
-          xxr(n1md,k) = xxr(n1md,k) + q2(1,j,k)*rwc(j)*pwm(k)
+          xxr(n1md,k) = q2(1,j,k)/rc(j)**2
         end do
-      end do
-ccc Uncomment to average in radial direction (instead of only summing)
-c     do k = 1, n3m
-c       do i = 1, n1md
-c         xxr(i,k) = xxr(i,k)/rsc
-c       end do
-c     end do
 c
 c     fft applied to the (q_2) by fft99
 c   from physical to wave number space
 c
-      call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
-      do 31 i=1,n1mh
-        ip=2*i
-        id=2*i-1
-        do 41 k=1,n3m
-          spec(k,i) = spec(k,i)
-     1              + real( cmplx(xxr(id,k),xxr(ip,k))
-     1              * conjg(cmplx(xxr(id,k),xxr(ip,k))) )
-  41    continue
-  31  continue
-c
-c
-      do k = 1, n3m
-        do i = 1, n1md
-          xxr(i,k) = 0.
-        end do
+        call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
+        do 31 i=1,n1mh
+          ip=2*i
+          id=2*i-1
+          do 41 k=1,n3m
+            spec(k,i) = spec(k,i)
+     1                + (xxr(id,k)**2 + xxr(ip,k)**2)
+     2                * rc(j)**2 * rwc(j) * pwm(k)
+  41      continue
+  31    continue
       end do
+c
+c
       do 2 j=1,n2m
         do 12 k=1,n3m
-          xxr(1,k) = xxr(1,k) + q1(n1m,j,k)*rwm(j)*pwm(k)
+          do i = 1,n1md
+            xxr(i,k) = 0.0d0
+          end do
+          xxr(1,k) = q1(n1m,j,k)
           do 22 i=1,n1m
             is=i+1
-            xxr(is,k) = xxr(is,k) + q1(i,j,k)*rwm(j)*pwm(k)
+            xxr(is,k) = q1(i,j,k)
   22      continue
-          xxr(n1md,k) = xxr(n1md,k) + q1(1,j,k)*rwm(j)*pwm(k)
+          xxr(n1md,k) = q1(1,j,k)
   12    continue
-  2   continue
-ccc Uncomment to average in radial direction (instead of only summing)
-c     do k = 1, n3m
-c       do i = 1, n1md
-c         xxr(i,k) = xxr(i,k)/rsm
-c       end do
-c     end do
 c
 c     fft applied to the (q_1) by fft99
 c   from physical to wave number space
 c
-      call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
-      do 32 i=1,n1mh
-        ip=2*i
-        id=2*i-1
-        do 42 k=1,n3m
-          spec(k,i) = spec(k,i)
-     1              + real( cmplx(xxr(id,k),xxr(ip,k))
-     1              * conjg(cmplx(xxr(id,k),xxr(ip,k))) )
+        call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
+        do 32 i=1,n1mh
+          ip=2*i
+          id=2*i-1
+          do 42 k=1,n3m
+            spec(k,i) = spec(k,i)
+     1                + (xxr(id,k)**2 + xxr(ip,k)**2)
+     2                * rwm(j) * pwm(k)
   42      continue
-  32  continue
+  32    continue
+  2   continue
 c
 c
-      do k = 1, n3m
-        do i = 1, n1md
-          xxr(i,k) = 0.
-        end do
-      end do
       do 3 j=1,n2m
         do 13 k=1,n3m
-          xxr(1,k) = xxr(1,k) + q3(n1m,j,k)*rwm(j)*pwc(k)
+          do i = 1,n1md
+            xxr(i,k) = 0.0d0
+          end do
+          xxr(1,k) = q3(n1m,j,k)*usinpc(k)
           do 23 i=1,n1m
             is=i+1
-            xxr(is,k) = xxr(is,k) + q3(i,j,k)*rwm(j)*pwc(k)
+            xxr(is,k) = q3(i,j,k)*usinpc(k)
    23     continue
-          xxr(n1md,k) = xxr(n1md,k) + q3(1,j,k)*rwm(j)*pwc(k)
+          xxr(n1md,k) = q3(1,j,k)*usinpc(k)
    13   continue
-   3  continue
-ccc Uncomment to average in radial direction (instead of only summing)
-c     do k = 1, n3m
-c       do i = 1, n1md
-c         xxr(i,k) = xxr(i,k)/rsm
-c       end do
-c     end do
 c
 c     fft applied to the (q_3) by fft99
 c   from physical to wave number space
 c
-      call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
-      do 33 i=1,n1mh
-        ip=2*i
-        id=2*i-1
-        do 43 k=1,n3m
-          spec(k,i) = spec(k,i)
-     1              + real( cmplx(xxr(id,k),xxr(ip,k))
-     1              * conjg(cmplx(xxr(id,k),xxr(ip,k))) )
-  43    continue
-  33  continue
+        call fft99(xxr,wwork,trigxv,ifxv,1,m1+1,n1m,n3m,-1)
+        do 33 i=1,n1mh
+          ip=2*i
+          id=2*i-1
+          do 43 k=1,n3m
+            spec(k,i) = spec(k,i)
+     1                + (xxr(id,k)**2 + xxr(ip,k)**2)
+     2                * rwm(j) * pwc(k) * sinpc(k)
+  43      continue
+  33    continue
+   3  continue
       
       nspec = nspec + 1
 
