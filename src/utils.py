@@ -2,6 +2,8 @@
 # To use import the library using the following command:
 # exec(open('/home/bilottos/Documents/PhD/Thesis_project/Programs/boutnp_sph_parallel/code/src/utils.py').read())
 
+import numpy as np
+
 def fndlst(
     directory,
     pattern,
@@ -34,7 +36,15 @@ def readfbin(filePath):
         v_ph = np.fromfile(f, dtype=np.float64, count=n1*n2*n3).reshape(n1,n2,n3, order='F')
         v_rh = np.fromfile(f, dtype=np.float64, count=n1*n2*n3).reshape(n1,n2,n3, order='F')
         v_th = np.fromfile(f, dtype=np.float64, count=n1*n2*n3).reshape(n1,n2,n3, order='F')
-    with open(filePath.parent / 'grid.xyz', 'rb') as f:
+
+    gridPath = filePath.parent / 'grid.xyz'
+    if not gridPath.exists():
+        gridPath = filePath.parent.parent / 'grid.xyz'
+        
+    if not gridPath.exists():
+        raise FileNotFoundError(f"Could not find 'grid.xyz' in {filePath.parent} or {filePath.parent.parent}")
+
+    with open(gridPath, 'rb') as f:
         _ = np.fromfile(f, dtype=np.int32, count=1)
         scalar = np.fromfile(f, dtype=np.int32, count=1)[0]
         _ = np.fromfile(f, dtype=np.int32, count=2)
