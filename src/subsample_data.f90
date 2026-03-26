@@ -13,11 +13,11 @@
 ! Esempi:
 !   1. Con parametri di default (2, 4, 2):
 !      ./subsampler 000100
-!      -> Legge 'boum000100.q' e scrive 'sub000100.q'
+!      -> Legge 'boum000100.q' e scrive 'bous000100.q'
 !
 !   2. Con parametri personalizzati (es. 2, 2, 2):
 !      ./subsampler 000100 2 2 2
-!      -> Legge 'boum000100.q' e scrive 'sub000100.q'
+!      -> Legge 'boum000100.q' e scrive 'bous000100.q'
 ! =============================================================================
 program subsample_data
   use, intrinsic :: iso_fortran_env, only: real64, error_unit
@@ -54,6 +54,12 @@ program subsample_data
   integer, parameter :: in_unit = 10, out_unit = 11
   logical            :: sample_grid
 
+  ! Argomenti da linea di comando posizionali e flag
+  integer            :: parsed_args_count, i
+  character(len=256) :: arg_str
+  character(len=256) :: pos_args(4)
+  logical            :: ask_grid
+
   ! Stride per il sottocampionamento
   integer :: i_stride, j_stride, k_stride
 
@@ -64,29 +70,46 @@ program subsample_data
   ! 1. Analisi degli argomenti da linea di comando
   call get_command_argument(0, executable_name, name_length, io_status) ! Ottiene il nome dell'eseguibile
   arg_count = command_argument_count()
-  if ((arg_count < 1).or.(arg_count == 2).or.(arg_count == 3).or.(arg_count > 4)) then
+
+  parsed_args_count = 0
+  ask_grid = .true.
+  do i = 1, arg_count
+    call get_command_argument(i, arg_str)
+    if (trim(arg_str) == "--no-grid" .or. trim(arg_str) == "-ng") then
+      ask_grid = .false.
+      sample_grid = .false.
+    else
+      parsed_args_count = parsed_args_count + 1
+      if (parsed_args_count <= 4) then
+        pos_args(parsed_args_count) = arg_str
+      end if
+    end if
+  end do
+
+  if ((parsed_args_count /= 1) .and. (parsed_args_count /= 4)) then
     write(error_unit, '("Errore: numero di argomenti non valido.")')
-    write(error_unit, '("Uso: ", a, " <timestep_id> [<i_stride> <j_stride> <k_stride>]")') executable_name(:name_length)
+    write(error_unit, '("Uso: ", a, " <timestep_id> [<i_stride> <j_stride> <k_stride>] [--no-grid]")') executable_name(:name_length)
     write(error_unit, '("Esempio 1 (default): ", a, " 000100")') executable_name(:name_length)
     write(error_unit, '("Esempio 2 (custom):  ", a, " 000100 2 2 2")') executable_name(:name_length)
+    write(error_unit, '("Esempio 3 (no-grid): ", a, " --no-grid 000100")') executable_name(:name_length)
     stop 1
   end if
 
   ! Legge il time step (obbligatorio)
-  call get_command_argument(1, time_step_str)
+  time_step_str = trim(pos_args(1))
 
   ! Imposta gli stride: default o da linea di comando
-  if (arg_count == 1) then
+  if (parsed_args_count == 1) then
     i_stride = 2
     j_stride = 4
     k_stride = 2
     write(*, *) "Stride non specificati, si usano i valori di default (2, 4, 2)."
-  else ! arg_count == 4
-    call get_command_argument(2, stride_str)
+  else ! parsed_args_count == 4
+    stride_str = trim(pos_args(2))
     read(stride_str, *) i_stride
-    call get_command_argument(3, stride_str)
+    stride_str = trim(pos_args(3))
     read(stride_str, *) j_stride
-    call get_command_argument(4, stride_str)
+    stride_str = trim(pos_args(4))
     read(stride_str, *) k_stride
   end if
   write(*, '(a, 3(i0, a))') "Stride utilizzati: (", i_stride, ", ", j_stride, ", ", k_stride, ")"
@@ -153,7 +176,9 @@ program subsample_data
   ! ===========================================================================
   ! 4. Processa il file della griglia (grid.xyz)
   ! ===========================================================================
-  call yn_input(sample_grid, "Processare anche il file della griglia?", .true.)
+  if (ask_grid) then
+    call yn_input(sample_grid, "Processare anche il file della griglia?", .true.)
+  end if
   if (sample_grid) then
     write(*, '(a, a)') "-> Processando il file della griglia: ", trim(grid_in_file)
     open(unit=in_unit, file=trim(grid_in_file), form='unformatted', status='old', &
