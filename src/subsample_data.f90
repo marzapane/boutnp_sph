@@ -187,7 +187,9 @@ program subsample_data
     read(in_unit) dummy_int
     read(in_unit) n1_check, n2_check, n3_check
     ! Verifica che le dimensioni siano consistenti con il file della griglia
-    if (n1_check /= n1 .or. n2_check /= n2 .or. n3_check /= n3) stop "Errore: Le dimensioni nel file grid.xyz non corrispondono a quelle del file dati."
+    if (n1_check /= n1 .or. n2_check /= n2 .or. n3_check /= n3) then
+      stop "Errore: Le dimensioni nel file grid.xyz non corrispondono a quelle del file dati."
+    end if
     allocate(xxx(n1, n2, n3), yyy(n1, n2, n3), zzz(n1, n2, n3), stat=io_status)
     if (io_status /= 0) stop "Errore: impossibile allocare memoria per la griglia completa."
     read(in_unit) xxx, yyy, zzz
