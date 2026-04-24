@@ -223,7 +223,7 @@ program compute_spectrum
   ! -------------------------------------------------------------
   ! Output the spectrum
   ! -------------------------------------------------------------
-  out_file = 'dati/spctr_corr' // trim(time_step_str) // '.bin'
+  out_file = 'spctr' // trim(time_step_str) // '.bin'
   write(*,*) "-> Writing output to ", trim(out_file)
   open(unit=out_unit, file=trim(out_file), form='unformatted', status='replace')
   write(out_unit) n3, n1mh

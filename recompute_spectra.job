@@ -57,9 +57,9 @@ for file in dati/spbou*.q; do
     # The prefix 'spbou' is 5 characters long.
     timestep="${basename:5:6}"
     
-    old_spctr="dati/spctr${timestep}.bin"
+    old_spctr="spctr${timestep}.bin"
     if [ -f "$old_spec" ]; then
-        mv "$old_spec" "dati/spctr${timestep}_wrong.bin"
+        mv "$old_spec" "spctr${timestep}_wrong.bin"
     fi
     
     echo "Processing timestep $timestep ..."
