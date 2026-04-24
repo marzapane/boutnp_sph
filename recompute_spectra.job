@@ -58,8 +58,8 @@ for file in dati/spbou*.q; do
     timestep="${basename:5:6}"
     
     old_spctr="spctr${timestep}.bin"
-    if [ -f "$old_spec" ]; then
-        mv "$old_spec" "spctr${timestep}_wrong.bin"
+    if [ -f "$old_spctr" ]; then
+        mv "$old_spctr" "spctr${timestep}_wrong.bin"
     fi
     
     echo "Processing timestep $timestep ..."
