@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+#SBATCH --partition=cn                  # Partition
+#SBATCH --job-name=pp_spctr                     # Job Name
+#SBATCH --time=00:20:00                       # WallTime
+
+#SBATCH --ntasks                1       # MUST BE 1
+#SBATCH --ntasks-per-node       1       # MUST BE 1
+#SBATCH --cpus-per-task         128
+#SBATCH --mem 0
+#SBATCH --exclusive
+
+#SBATCH -o slurm.%j.out                 # STDOUT
+#SBATCH -e slurm.%j.err                 # STDERR
+
+#SBATCH --account=ehpc-reg-2023r03-178
+#SBATCH --qos=ehpc-reg-2023r03-178
+
+#SBATCH --mail-type=END
+#SBATCH --mail-user=pierpaolo.bilotto@gssi.it
+
+# ==============================================================================
+# SLURM Wrapper for recompute_spectra.sh
+# Usage: sbatch recompute_spectra.slurm <path_to_run_directory>
+# ==============================================================================
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 /path/to/run/directory/"
+    exit 1
+fi
+
+RUN_DIR="$1"
+
+# Update this path if your compiled executable is located elsewhere
+COMPUTE_EXEC="/home/bilottos/Documents/PhD/Thesis_project/Programs/boutnp_sph_parallel/code/compute_spectrum"
+
+if [ ! -f "$COMPUTE_EXEC" ]; then
+    echo "Error: Executable $COMPUTE_EXEC not found."
+    echo "Please compile postprocess_spectrum_f.f90 first, for example:"
+    echo "gfortran -fdefault-real-8 -fdefault-double-8 -o postprocess_spectrum src/postprocess_spectrum_f.f90 src/ffts.f"
+    exit 1
+fi
+
+# Enter the run directory
+cd "$RUN_DIR" || { echo "Error: Cannot enter directory $RUN_DIR"; exit 1; }
+
+for file in dati/spbou*.q; do
+    if [ ! -f "$file" ]; then
+        echo "No spbou*.q files found in dati/ directory."
+        break
+    fi
+    
+    # Extract the filename without the path
+    basename=$(basename "$file")
+    
+    # Extract the 6-digit timestep (spbouXXXXXX.q -> XXXXXX)
+    # The prefix 'spbou' is 5 characters long.
+    timestep="${basename:5:6}"
+    
+    old_spctr="dati/spctr${timestep}.bin"
+    if [ -f "$old_spec" ]; then
+        mv "$old_spec" "dati/spctr${timestep}_wrong.bin"
+    fi
+    
+    echo "Processing timestep $timestep ..."
+    "$COMPUTE_EXEC" "$timestep"
+done
