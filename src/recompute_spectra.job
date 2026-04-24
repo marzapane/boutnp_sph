@@ -32,12 +32,12 @@ fi
 RUN_DIR="$1"
 
 # Update this path if your compiled executable is located elsewhere
-COMPUTE_EXEC="/home/bilottos/Documents/PhD/Thesis_project/Programs/boutnp_sph_parallel/code/compute_spectrum"
+COMPUTE_EXEC="/home/pbilotto/boutnp_sph/code/pp_spctr"
 
 if [ ! -f "$COMPUTE_EXEC" ]; then
     echo "Error: Executable $COMPUTE_EXEC not found."
-    echo "Please compile postprocess_spectrum_f.f90 first, for example:"
-    echo "gfortran -fdefault-real-8 -fdefault-double-8 -o postprocess_spectrum src/postprocess_spectrum_f.f90 src/ffts.f"
+    echo "Please compile postprocess_spectrum.f90 first, for example:"
+    echo "gfortran -fdefault-real-8 -fdefault-double-8 -o pp_spctr src/postprocess_spectrum.f90 src/ffts.f"
     exit 1
 fi
 
