@@ -116,7 +116,7 @@ program compute_spectrum
     dth_1d(n3) = th_1d(n3) - th_1d(n3-1)
   end if
 
-  dph = 2.0_real64 * pi / real(n1m, real64)
+  dph = 2.0_real64 * pi
 
   ! Volume element matrix dV(j, k)
   allocate(dV(n2, n3))
