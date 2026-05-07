@@ -21,15 +21,13 @@
 
 # ==============================================================================
 # SLURM Wrapper for recompute_spectra.sh
-# Usage: sbatch recompute_spectra.slurm <path_to_run_directory>
-# ==============================================================================
-
-if [ -z "$1" ]; then
-    echo "Usage: $0 /path/to/run/directory/"
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Usage: $0 /path/to/run/directory/ <r_in>"
     exit 1
 fi
 
 RUN_DIR="$1"
+R_IN="$2"
 
 # Update this path if your compiled executable is located elsewhere
 COMPUTE_EXEC="/home/pbilotto/boutnp_sph/code/pp_spctr"
@@ -69,5 +67,5 @@ for file in dati/spbou*.q; do
     # fi
     
     echo "Processing timestep $timestep ..."
-    "$COMPUTE_EXEC" "$timestep"
+    "$COMPUTE_EXEC" "$timestep" -r="$R_IN"
 done
