@@ -28,13 +28,15 @@ c
       subroutine spect
       include 'param.f'
       dimension rwc(m2),rwm(m2),pwc(m3),pwm(m3)
-      real      rtr,rsc,rsm,pi
-      real   xxr(m1m+2,m3m),wwork(m1m+1,m3m)
+      real      rsc,rsm,pi
+      real      cp,sp,ct,st,vt,vr,vp
+      real      vx(m1,m2,m3),vy(m1,m2,m3),vz(m1,m2,m3)
+      real      xxr(m1m+2,m3m),wwork(m1m+1,m3m)
       integer n1mh
 
       call fftv
       dvol = 1./(dx2 * dx3)
-      pi = 2. * asin (1.)
+      pi = 2. * asin(1.)
       n1mh=n1m/2+1
       n1md=n1m+2
       rsc = 0.0d0
@@ -53,18 +55,42 @@ c sin(phi) factor simplifies between integration measure (sin(phi) dphi)
 c and field (v_phi = q3/sin(phi))
         pwm(k) = sinpm(k) * g3rm(k)/dx3
       end do
+
+      do k=1,n3
+        cp = cos(zz(k))
+        sp = sin(zz(k))
+        do j=2,n2
+          do i=1,n1
+            ct = cos(thetac(i))
+            st = sin(thetac(i))
+c polar velocities
+            vt = q1(i,j,k)
+            vr = q2(i,j,k)/rc(j)**2
+            if ((k.eq.1).or.(k.eq.n3)) then
+              vp = 0.0d0
+            else
+              vp = q3(i,j,k)/sp
+            end if
+c Cartesian velocities
+            vx(i,j,k) = -vt*st + vr*ct*sp + vp*ct*cp
+            vy(i,j,k) =  vt*ct + vr*st*sp + vp*st*cp
+            vz(i,j,k) =          vr*cp    - vp*sp
+          end do
+        end do
+      end do
+
 c average v_r in xxr
       do j = 1,n2
         do k = 1,n3m
           do i = 1,n1md
             xxr(i,k) = 0.0d0
           end do
-          xxr(1,k) = q2(n1m,j,k)/rc(j)**2
+          xxr(1,k) = vy(n1m,j,k)
           do i = 1,n1m
             is = i+1
-            xxr(is,k) = q2(i,j,k)/rc(j)**2
+            xxr(is,k) = vy(i,j,k)
           end do
-          xxr(n1md,k) = q2(1,j,k)/rc(j)**2
+          xxr(n1md,k) = vy(1,j,k)
         end do
 c
 c     fft applied to the (q_2) by fft99
@@ -77,7 +103,7 @@ c
           do 41 k=1,n3m
             spec(k,i) = spec(k,i)
      1                + (xxr(id,k)**2 + xxr(ip,k)**2)
-     2                * rc(j)**2 * rwc(j) * pwm(k)
+     2                * rc(j)**2 * rwc(j) * pwm(k) * pi
   41      continue
   31    continue
       end do
@@ -88,12 +114,12 @@ c
           do i = 1,n1md
             xxr(i,k) = 0.0d0
           end do
-          xxr(1,k) = q1(n1m,j,k)
+          xxr(1,k) = vx(n1m,j,k)
           do 22 i=1,n1m
             is=i+1
-            xxr(is,k) = q1(i,j,k)
+            xxr(is,k) = vx(i,j,k)
   22      continue
-          xxr(n1md,k) = q1(1,j,k)
+          xxr(n1md,k) = vx(1,j,k)
   12    continue
 c
 c     fft applied to the (q_1) by fft99
@@ -106,7 +132,7 @@ c
           do 42 k=1,n3m
             spec(k,i) = spec(k,i)
      1                + (xxr(id,k)**2 + xxr(ip,k)**2)
-     2                * rwm(j) * pwm(k)
+     2                * rwm(j) * pwm(k) * pi
   42      continue
   32    continue
   2   continue
@@ -117,12 +143,12 @@ c
           do i = 1,n1md
             xxr(i,k) = 0.0d0
           end do
-          xxr(1,k) = q3(n1m,j,k)*usinpc(k)
+          xxr(1,k) = vz(n1m,j,k)
           do 23 i=1,n1m
             is=i+1
-            xxr(is,k) = q3(i,j,k)*usinpc(k)
+            xxr(is,k) = vz(i,j,k)
    23     continue
-          xxr(n1md,k) = q3(1,j,k)*usinpc(k)
+          xxr(n1md,k) = vz(1,j,k)
    13   continue
 c
 c     fft applied to the (q_3) by fft99
@@ -135,7 +161,7 @@ c
           do 43 k=1,n3m
             spec(k,i) = spec(k,i)
      1                + (xxr(id,k)**2 + xxr(ip,k)**2)
-     2                * rwm(j) * pwc(k) * sinpc(k)
+     2                * rwm(j) * pwc(k) * sinpc(k) * pi
   43      continue
   33    continue
    3  continue
@@ -156,6 +182,15 @@ c
       open(39,file=filsp,form='unformatted',status='unknown')
       write(39) n3m, n1mh
       write(39) (((mode(k,i)),k=1,n3m),i=1,n1mh)
+c     Apply factor 2 for interior modes (m>0, m<N/2): conjugate frequency folding
+      do i = 2, n1mh-1
+        if (i == n1mh .and. mod(n1m, 2) == 0) then
+          continue  ! Nyquist: no factor 2
+        end if
+        do k = 1, n3m
+          spec(k,i) = spec(k,i) * 2.0d0
+        end do
+      end do
       write(39) (((spec(k,i)/nspec),k=1,n3m),i=1,n1mh)
       write(39) time
       close(39)
