@@ -111,11 +111,8 @@ program compute_spectrum
   read(in_unit) epsil, epsil, re, sim_time
 
   allocate(E_field(n1, n2, n3), v1(n1, n2, n3), v2(n1, n2, n3), v3(n1, n2, n3), pr(n1, n2, n3))
-  read(in_unit) E_field ! Velocity Magnitude
-  read(in_unit) v1      ! vt (polar) or vx (Cartesian)
-  read(in_unit) v2      ! vr (polar) or vy (Cartesian)
-  read(in_unit) v3      ! vp (polar) or vz (Cartesian)
-  read(in_unit) pr      ! Pressure
+  ! Read all 5 fields from the single record written by outpf/bounn.f
+  read(in_unit) E_field, v1, v2, v3, pr
   close(in_unit)
 
   n1m = n1 - 1   ! unique azimuthal points (i=n1 is periodic copy of i=1)
