@@ -87,7 +87,7 @@ contains
     end subroutine get_energy_spectrum
 
     ! 3. Computes two separate spectra, one for the m=0 mode and one for all the rest
-    subroutine get_m_spectra(coeffs, lmax, spec_m0, spec_m_rest)
+    subroutine get_m0_spectrum(coeffs, lmax, spec_m0, spec_m_rest)
         integer, intent(in) :: lmax
         real(kind=real64), intent(in) :: coeffs(2, lmax+1, lmax+1)
         real(kind=real64), intent(out) :: spec_m0(lmax+1), spec_m_rest(lmax+1)
@@ -106,7 +106,272 @@ contains
             ! The rest is the total minus the m=0 component
             spec_m_rest(l+1) = spec_tot(l+1) - spec_m0(l+1)
         end do
-    end subroutine get_m_spectra
+    end subroutine get_m0_spectrum
+
+    ! =========================================================================
+    ! VOLUME SPECTRUM ROUTINES
+    ! =========================================================================
+
+    ! 4. Computes spectral energy density per degree and shell for ONE component.
+    !    energy(l+1, j) = sum_{m=0}^{l} [ C(l,m,j)^2 + S(l,m,j)^2 ]
+    subroutine compute_spectral_energy(coeffs, lmax, n_shells, energy)
+        integer, intent(in) :: lmax, n_shells
+        real(kind=real64), intent(in)  :: coeffs(2, lmax+1, lmax+1, n_shells)
+        real(kind=real64), intent(out) :: energy(lmax+1, n_shells)
+
+        integer :: l, m, j
+
+        energy = 0.0_real64
+        do j = 1, n_shells
+            do l = 0, lmax
+                do m = 0, l
+                    energy(l+1, j) = energy(l+1, j) &
+                        + coeffs(1, l+1, m+1, j)**2 + coeffs(2, l+1, m+1, j)**2
+                end do
+            end do
+        end do
+    end subroutine compute_spectral_energy
+
+    ! 5. Applies a 1-D Gaussian low-pass filter along the radial (shell) direction.
+    !    Gaussian sigma = ell / sqrt(12), truncated at 3*sigma.
+    !    Boundaries: truncate kernel and renormalize.
+    subroutine radial_gaussian_filter(coeffs_in, lmax, n_shells, ell, coeffs_out)
+        integer, intent(in) :: lmax, n_shells, ell
+        real(kind=real64), intent(in)  :: coeffs_in(2, lmax+1, lmax+1, n_shells)
+        real(kind=real64), intent(out) :: coeffs_out(2, lmax+1, lmax+1, n_shells)
+
+        real(kind=real64) :: sigma, inv_2sig2
+        integer :: j_max           ! half-width of the kernel in grid points
+        real(kind=real64), allocatable :: w(:)   ! kernel weights, 0:2*j_max
+        real(kind=real64) :: norm
+        integer :: i, j, j_lo, j_hi, k
+
+        sigma = real(ell, real64) / sqrt(12.0_real64)
+        j_max = min(3 * ceiling(sigma), n_shells - 1)
+        inv_2sig2 = 1.0_real64 / (2.0_real64 * sigma * sigma)
+
+        ! Pre-compute symmetric kernel weights  w(0) .. w(2*j_max)
+        !   w(k) = exp( -(k - j_max)^2 / (2 sigma^2) )
+        allocate(w(0:2*j_max))
+        do j = 0, 2*j_max
+            w(j) = exp(-real((j - j_max)**2, real64) * inv_2sig2)
+        end do
+
+        ! Convolve each coefficient independently along the shell (j) direction
+        coeffs_out = 0.0_real64
+        do i = 1, n_shells
+            ! Clamp the kernel window to stay within [1, n_shells]
+            j_lo = max(0, j_max - (i - 1))       ! first valid kernel index
+            j_hi = min(2*j_max, j_max + (n_shells - i))  ! last valid kernel index
+
+            ! Accumulate weighted sum and normalisation
+            norm = 0.0_real64
+            do j = j_lo, j_hi
+                k = i + (j - j_max)             ! shell index being sampled
+                coeffs_out(:, :, :, i) = coeffs_out(:, :, :, i) &
+                    + w(j) * coeffs_in(:, :, :, k)
+                norm = norm + w(j)
+            end do
+            coeffs_out(:, :, :, i) = coeffs_out(:, :, :, i) / norm
+        end do
+
+        deallocate(w)
+    end subroutine radial_gaussian_filter
+
+    ! 6. Computes the 3D energy map E_modes(l+1, ell, j) by sweeping Gaussian
+    !    filter scales over all velocity components.
+    !    E_modes(l+1, ell, j) is the total kinetic energy contribution from
+    !    angular degree l, radial filter scale ell, and shell j, summed over
+    !    all 3 velocity components.  Cells where no component contributes
+    !    positive energy are left at zero.
+    subroutine compute_volume_spectrum(coeffs_all, lmax, n_shells, r_min, dr, E_modes)
+        integer,           intent(in)  :: lmax, n_shells
+        real(kind=real64), intent(in)  :: coeffs_all(2, lmax+1, lmax+1, n_shells, 3)
+        real(kind=real64), intent(in)  :: r_min, dr
+        ! E_modes(l+1, ell, j): energy at degree l, filter scale ell, shell j.
+        ! Dimensions: (lmax+1) x (0:n_shells) x n_shells
+        real(kind=real64), intent(out) :: E_modes(lmax+1, 0:n_shells, n_shells)
+
+        real(kind=real64), allocatable :: coeffs_filt(:,:,:,:), coeffs_avg(:,:,:,:)
+        ! Filter Scale Energy (fse) and Higher Scale Energy (hse)
+        real(kind=real64), allocatable :: fse(:,:), hse(:,:)
+
+        real(kind=real64) :: pi, r_j, eps_val, parseval_lhs, parseval_rhs, E_dens
+        integer :: comp, ell, l, j, k
+
+        pi = 2.0_real64 * asin(1.0_real64)
+
+        allocate(coeffs_avg(2, lmax+1, lmax+1, n_shells))
+        allocate(coeffs_filt(2, lmax+1, lmax+1, n_shells))
+        allocate(hse(lmax+1, n_shells), fse(lmax+1, n_shells))
+
+        E_modes      = 0.0_real64
+        parseval_lhs = 0.0_real64
+        parseval_rhs = 0.0_real64
+
+        ! ==== Loop over velocity components ====
+        do comp = 1, 3
+            
+            ! k = 0 means infinite filtering scale, i.e. simple averaging
+            coeffs_avg = 0.0_real64
+            do j = 1, n_shells
+                coeffs_avg(:,:,:,1) = coeffs_avg(:,:,:,1) + coeffs_all(:,:,:,j,comp)
+            end do
+            coeffs_avg(:,:,:,1) = coeffs_avg(:,:,:,1) / n_shells
+            do j = 2, n_shells
+                coeffs_avg(:,:,:,j) = coeffs_avg(:,:,:,1)
+            end do
+            call compute_spectral_energy(coeffs_avg(:,:,:,:), lmax, n_shells, fse)
+
+            ! Accumulate energy contribution into the 3D map
+            do j = 1, n_shells
+                r_j = r_min + real(j - 1, real64) * dr
+                do l = 0, lmax
+                    E_dens = 0.5_real64 * fse(l+1, j) * r_j**2 * dr
+                    E_modes(l+1, 0, j) = E_modes(l+1, 0, j) + E_dens
+                    parseval_lhs = parseval_lhs + E_dens
+                end do
+            end do
+
+            ! Set hse: first iteration (k = 1) differentiates against fse
+            hse = fse
+
+            ! ---- Sweep over radial filter scales ----
+            ! Field filtered at scale ell has cumulative energy of all scales < ell.
+            ! Pair-wise differences represents energy between the 2 filtering scales.
+            do k = 1, n_shells-1
+                ! ell = N / sqrt(k(k+1))    : geometric average between N/k and N/(k+1)
+                ell = real(n_shells, real64) / sqrt(real(k, real64)*(real(k, real64)+1))
+
+                call radial_gaussian_filter(coeffs_all(:,:,:,:,comp), lmax, n_shells, &
+                                            ell, coeffs_filt)
+                call compute_spectral_energy(coeffs_filt, lmax, n_shells, fse)
+
+                ! Accumulate energy contribution into the 3D map
+                do j = 1, n_shells
+                    r_j = r_min + real(j - 1, real64) * dr
+                    do l = 0, lmax
+                        E_dens = 0.5_real64 * (fse(l+1, j) - hse(l+1, j)) * r_j**2 * dr
+                        E_modes(l+1, k, j) = E_modes(l+1, k, j) + E_dens
+                        parseval_lhs = parseval_lhs + E_dens
+                    end do
+                end do
+
+                ! Update hse in-place: next iteration differentiates against fse
+                hse = fse
+
+                if (mod(k, 25) == 0) write(*,'(A,I4,A,I4,A,I2)') &
+                    "      k = ", k, " * pi/(", n_shells, "dr),   component ", comp
+            end do   ! ek
+            
+            ! Unfiltered spectral energy of original field (ell=0 => k_max)
+            call compute_spectral_energy(coeffs_all(:,:,:,:,comp), lmax, n_shells, fse)
+            ! Accumulate energy contribution into the 3D map
+            do j = 1, n_shells
+                r_j = r_min + real(j - 1, real64) * dr
+                do l = 0, lmax
+                    E_dens = 0.5_real64 * (fse(l+1, j) - hse(l+1, j)) * r_j**2 * dr
+                    E_modes(l+1, n_shells, j) = E_modes(l+1, n_shells, j) + E_dens
+                    parseval_lhs = parseval_lhs + E_dens
+                end do
+            end do        
+
+            ! Parseval RHS: 0.5 * sum_{l,j} fse(l,j) * r_j^2 * dr
+            do j = 1, n_shells
+                r_j = r_min + real(j - 1, real64) * dr
+                do l = 0, lmax
+                    parseval_rhs = parseval_rhs + 0.5_real64 * fse(l+1, j) * r_j**2 * dr
+                end do
+            end do
+            
+        end do   ! comp
+
+        ! ---- Parseval diagnostic ----
+        write(*,'(A)')          "   --- Parseval energy-conservation check ---"
+        write(*,'(A, ES14.7)')  "       Binned spectrum sum  : ", parseval_lhs
+        write(*,'(A, ES14.7)')  "       Direct original integral  : ", parseval_rhs
+        if (parseval_rhs > 0.0_real64) then
+            write(*,'(A, F8.4, A)') "       Relative difference  : ", &
+                abs(parseval_lhs - parseval_rhs) / parseval_rhs * 100.0_real64, " %"
+        end if
+
+        deallocate(coeffs_filt, hse, fse, coeffs_avg)
+    end subroutine compute_volume_spectrum
+
+    ! 7. Bins the 3D energy map E_modes(l+1, ell, j) into n_bins logarithmically-
+    !    spaced bins.  Bin edges are determined from the actual min/max K values
+    !    found in the data.  K is recomputed from the array indices (l, ell, j)
+    !    using the same wavenumber mapping as compute_volume_spectrum.
+    !    Uses CIC interpolation between the two nearest bin centres.
+    subroutine bin_spectrum(E_modes, lmax, n_shells, r_min, r_max, n_bins, E_K, K_bins)
+        integer,           intent(in)  :: lmax, n_shells, n_bins
+        real(kind=real64), intent(in)  :: E_modes(lmax+1, 0:n_shells, n_shells)
+        real(kind=real64), intent(in)  :: r_min, r_max
+        real(kind=real64), intent(out) :: E_K(0:n_bins), K_bins(0:n_bins)
+
+        real(kind=real64) :: pi, dr, log_K_min, log_K_max, inv_log_delta, log_delta
+        real(kind=real64) :: r_j, k_ang, k_rad, K_tot, E_contrib, real_idx, w_lo, w_hi
+        integer :: l, j, k, idx
+
+        pi = 2.0_real64 * asin(1.0_real64)
+        dr = (r_max - r_min) / real(n_shells - 1, real64)
+
+        ! ---- Determine bin range from actual K values in the data ----
+        ! K_min must be strictly positive since log(0) or log(negative) is undefined.
+        ! We set K_min to the smallest non-zero physical scale (fundamental mode).
+
+
+        log_K_min     = log(min(sqrt(2.0_real64)/r_max, pi/(r_max-r_min)))
+        log_K_max     = log(real(lmax * (lmax + 1), real64) / r_min**2 + (pi/dr)**2) / 2.0_real64
+        log_delta     = (log_K_max - log_K_min) / real(n_bins, real64)
+        inv_log_delta = real(n_bins, real64) / (log_K_max - log_K_min)
+
+        ! ---- Build logarithmic bin centres directly ----
+        K_bins(0) = 0.0_real64
+        do j = 1, n_bins
+            K_bins(j) = exp(log_K_min + (real(j, real64) - 0.5_real64) * log_delta)
+        end do
+
+        E_K = 0.0_real64
+
+        ! ---- CIC accumulation ----
+        do j = 1, n_shells
+            r_j = r_min + real(j - 1, real64) * dr
+            do k = 0, n_shells
+                do l = 0, lmax
+                    E_contrib = E_modes(l+1, k, j)
+                    if (E_contrib <= 0.0_real64) cycle
+
+                    k_ang   = sqrt(real(l * (l + 1), real64)) / r_j
+                    k_rad   = real(k, real64) * pi/(r_max-r_min)
+                    K_tot = sqrt(k_ang**2 + k_rad**2)
+
+                    ! Guard against log(0) for the DC / zero-wavenumber mode (k=0, l=0)
+                    if (K_tot <= 0.0_real64) then
+                        E_K(0) = E_K(0) + E_contrib
+                        cycle
+                    end if
+
+                    ! Direct O(1) index relative to bin centres (offset by +0.5)
+                    real_idx = (log(K_tot) - log_K_min) * inv_log_delta + 0.5_real64
+                    idx      = int(real_idx)
+
+                    ! CIC: interpolate in logarithmic scale between the two nearest bin centres
+                    if (idx < 1) then
+                        E_K(1) = E_K(1) + E_contrib
+                    else if (idx >= n_bins) then
+                        E_K(n_bins) = E_K(n_bins) + E_contrib
+                    else
+                        w_hi         = real_idx - real(idx, real64)
+                        w_lo         = 1.0_real64 - w_hi
+                        E_K(idx)     = E_K(idx)     + E_contrib * w_lo
+                        E_K(idx + 1) = E_K(idx + 1) + E_contrib * w_hi
+                    end if
+                end do
+            end do
+        end do
+
+    end subroutine bin_spectrum
 
 end module sht_processing_mod
 
@@ -118,11 +383,11 @@ program sht_3d_utility
     implicit none
 
     integer :: n1, n2, n3, lmax, n_lat, n_lon
-    integer :: arg_count, i, j, k
+    integer :: arg_count, i, j, k, io_status
     real(kind=real64) :: sim_time, pi, lon, colat, ct, st, cp, sp
     
-    character(len=256) :: input_path, coord_type, out_file
-    integer, parameter :: out_unit = 11
+    character(len=256) :: input_path, coord_type, out_file, r_arg
+    integer, parameter :: out_unit = 11, vol_unit = 12
     
     real(kind=real64), allocatable :: v1(:,:,:), v2(:,:,:), v3(:,:,:)
     real(kind=real64), allocatable :: vx(:,:,:), vy(:,:,:), vz(:,:,:)
@@ -132,21 +397,45 @@ program sht_3d_utility
     real(kind=real64), allocatable :: spec_tot(:), spec_m0(:), spec_m_rest(:)
     real(kind=real64), allocatable :: spec_tot_3d(:,:), spec_m0_3d(:,:), spec_m_rest_3d(:,:)
     
+    ! Volume spectrum arrays
+    real(kind=real64), allocatable :: coeffs_all(:,:,:,:,:)
+    real(kind=real64), allocatable :: E_modes(:,:,:)
+    real(kind=real64), allocatable :: E_K(:), K_bins(:)
+    real(kind=real64) :: rint, rext, dr
+    integer :: n_bins
+
     real(kind=real64) :: vt, vr, vp
 
     ! 1. Parse Command Line
     arg_count = command_argument_count()
-    if (arg_count < 1) then
-        write(error_unit, '("Usage: ./sht_3d_utility <file_path> [-c|-p]")')
+    if (arg_count < 2) then
+        write(error_unit, '("Usage: ./sht_3d_utility <file_path> -r=<r_in> [-c|-p]")')
+        write(error_unit, '(" -r=<r_in>    : inner radius (required); r_ext = r_in + 1")')
         write(error_unit, '(" -c (default) = velocity field input is in Cartesian coordinates")')
         write(error_unit, '(" -p           = velocity field input is in polar coordinates")')
+        write(error_unit, '("Example: ./sht_3d_utility dati/spbou001000.q -r=7.0 -p")')
         stop 1
     end if
 
     call get_command_argument(1, input_path)
     
-    if (arg_count >= 2) then
-        call get_command_argument(2, coord_type)
+    ! Parse -r=<value> (second argument, required)
+    call get_command_argument(2, r_arg)
+    if (r_arg(1:3) /= '-r=') then
+        write(error_unit, '("Error: second argument must be -r=<r_in>.")')
+        stop 1
+    end if
+    read(r_arg(4:), *, iostat=io_status) rint
+    if (io_status /= 0) then
+        write(error_unit, '("Error: could not parse r_in from: ", A)') trim(r_arg)
+        stop 1
+    end if
+    rext = rint + 1.0_real64
+    write(*, '(A, F10.4, A, F10.4)') "   Inner radius: ", rint, "   Outer radius: ", rext
+
+    ! Parse optional coordinate flag (third argument)
+    if (arg_count >= 3) then
+        call get_command_argument(3, coord_type)
     else
         coord_type = '-c'
     end if
@@ -154,6 +443,9 @@ program sht_3d_utility
     ! 2. Read Data
     call read_simulation_data(input_path, n1, n2, n3, sim_time, v1, v2, v3)
     write(*, '(A, 3(I0, A), F10.4)') "   Dimensions: ", n1, "x", n2, "x", n3, " at time ", sim_time
+
+    ! Compute radial spacing (uniform grid, shell thickness = 1)
+    dr = (rext - rint) / real(n2 - 1, real64)
 
     ! 3. Handle Velocity Field Appropriately (Polar vs Cartesian)
     allocate(vx(n1, n2, n3), vy(n1, n2, n3), vz(n1, n2, n3))
@@ -207,6 +499,9 @@ program sht_3d_utility
     
     allocate(spec_tot_3d(lmax+1, n2), spec_m0_3d(lmax+1, n2), spec_m_rest_3d(lmax+1, n2))
     
+    ! Allocate storage for all SH coefficients (all shells, all 3 components)
+    allocate(coeffs_all(2, lmax+1, lmax+1, n2, 3))
+
     spec_tot_3d = 0.0_real64
     spec_m0_3d = 0.0_real64
     spec_m_rest_3d = 0.0_real64
@@ -223,6 +518,11 @@ program sht_3d_utility
         call get_sht_coeffs(grid_y, n_lat, lmax, coeffs_y)
         call get_sht_coeffs(grid_z, n_lat, lmax, coeffs_z)
 
+        ! Store coefficients for volume spectrum
+        coeffs_all(:, :, :, j, 1) = coeffs_x
+        coeffs_all(:, :, :, j, 2) = coeffs_y
+        coeffs_all(:, :, :, j, 3) = coeffs_z
+
         ! Call Subroutine 2: Get Energy Spectra
         call get_energy_spectrum(coeffs_x, lmax, spec_tot)
         spec_tot_3d(:, j) = spec_tot_3d(:, j) + spec_tot(:)
@@ -234,25 +534,31 @@ program sht_3d_utility
         spec_tot_3d(:, j) = spec_tot_3d(:, j) + spec_tot(:)
 
         ! Call Subroutine 3: Get m=0 and m!=0 Spectra
-        call get_m_spectra(coeffs_x, lmax, spec_m0, spec_m_rest)
+        call get_m0_spectrum(coeffs_x, lmax, spec_m0, spec_m_rest)
         spec_m0_3d(:, j) = spec_m0_3d(:, j) + spec_m0(:)
         spec_m_rest_3d(:, j) = spec_m_rest_3d(:, j) + spec_m_rest(:)
         
-        call get_m_spectra(coeffs_y, lmax, spec_m0, spec_m_rest)
+        call get_m0_spectrum(coeffs_y, lmax, spec_m0, spec_m_rest)
         spec_m0_3d(:, j) = spec_m0_3d(:, j) + spec_m0(:)
         spec_m_rest_3d(:, j) = spec_m_rest_3d(:, j) + spec_m_rest(:)
         
-        call get_m_spectra(coeffs_z, lmax, spec_m0, spec_m_rest)
+        call get_m0_spectrum(coeffs_z, lmax, spec_m0, spec_m_rest)
         spec_m0_3d(:, j) = spec_m0_3d(:, j) + spec_m0(:)
         spec_m_rest_3d(:, j) = spec_m_rest_3d(:, j) + spec_m_rest(:)
 
         if (mod(j, 25) == 0) write(*,*) "      Progress: shell ", j, "/", n2
     end do
 
-    ! 5. Output the Three Spectra
+    ! Free velocity fields — no longer needed, coefficients are stored
+    deallocate(vx, vy, vz)
+    deallocate(grid_x, grid_y, grid_z)
+    deallocate(coeffs_x, coeffs_y, coeffs_z)
+    deallocate(spec_tot, spec_m0, spec_m_rest)
+
+    ! 5. Output the Three Per-Shell Spectra
     out_file = 'spectrum.dat'
     
-    write(*,*) "-> Saving Spectrum to: ", trim(out_file)
+    write(*,*) "-> Saving horizontal Spectrum to: ", trim(out_file)
     open(unit=out_unit, file=trim(out_file), status='replace')
     write(out_unit, '(A)') "# L-degree | Radial Index | Total Energy Spectrum | Zonal Energy Spectrum (m=0) | Residual Energy Spectrum (m!=0)"
     do j = 1, n2
@@ -263,4 +569,39 @@ program sht_3d_utility
     end do
     close(out_unit)
 
+    deallocate(spec_tot_3d, spec_m0_3d, spec_m_rest_3d)
+
+    ! 6. Compute and Output the 3D Volume Spectrum E(K)
+    write(*,*) "-> Computing 3D Volume Spectrum E(K)..."
+
+    ! E_modes(l+1, ell, j): energy at degree l, filter scale ell, shell j
+    allocate(E_modes(lmax+1, 0:n2, n2))
+
+    call compute_volume_spectrum(coeffs_all, lmax, n2, rint, dr, E_modes)
+    deallocate(coeffs_all)
+
+    ! Number of logarithmic bins (~10 per octave)
+    n_bins = max(64, nint(10 * log(real(max(lmax, n2), real64)) / log(2.0_real64)))
+    allocate(E_K(0:n_bins), K_bins(0:n_bins))
+
+    call bin_spectrum(E_modes, lmax, n2, rint, rext, n_bins, E_K, K_bins)
+    deallocate(E_modes)
+
+    ! Write volume spectrum
+    out_file = 'volume_spectrum.dat'
+    write(*,*) "-> Saving Volume Spectrum to: ", trim(out_file)
+    open(unit=vol_unit, file=trim(out_file), status='replace')
+    write(vol_unit, '(A)') "# K_tot | E(K)"
+    do i = 0, n_bins
+        if (E_K(i) > 0.0_real64) then
+            write(vol_unit, '(ES15.7, ES15.7)') K_bins(i), E_K(i)
+        end if
+    end do
+    close(vol_unit)
+
+    deallocate(E_K, K_bins)
+
+    write(*,*) "-> Done."
+
 end program sht_3d_utility
+
