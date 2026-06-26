@@ -4,3 +4,5 @@
 src/read_fortran_binary.py
 src/__pycache__
 /subsampler
+*.dat
+*.mod

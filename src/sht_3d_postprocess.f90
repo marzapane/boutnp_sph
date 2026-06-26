@@ -45,11 +45,7 @@ contains
         allocate(v1(n1, n2, n3), v2(n1, n2, n3), v3(n1, n2, n3))
         
         ! Read all fields (standard output format from outpf)
-        read(in_unit) field_temp ! Velocity Magnitude
-        read(in_unit) v1         ! Azimuthal (vt) or X (vx)
-        read(in_unit) v2         ! Radial (vr) or Y (vy)
-        read(in_unit) v3         ! Polar (vp) or Z (vz)
-        read(in_unit) pr         ! Pressure
+        read(in_unit) field_temp, v1, v2, v3, pr
         close(in_unit)
         
     end subroutine read_simulation_data
@@ -76,48 +72,112 @@ contains
         call SHExpandDH(grid, n_lat, coeffs, lmax, lmax_calc=lmax_calc, sampling=2)
     end subroutine get_sht_coeffs
 
-    ! 2. Computes and returns the energy spectrum
-    subroutine get_energy_spectrum(coeffs, lmax, spec_tot)
+    ! 2. Computes the energy spectrum, the m=0 spectrum and all the rest,
+    ! and accumulates the results.
+    subroutine upd_energy_spectrum(coeffs, lmax, spec_tot, spec_m0, spec_rest)
         integer, intent(in) :: lmax
-        real(kind=real64), intent(in) :: coeffs(2, lmax+1, lmax+1)
-        real(kind=real64), intent(out) :: spec_tot(lmax+1)
+        real(kind=real64), intent(in) :: coeffs(2, 0:lmax, 0:lmax)
+        real(kind=real64), intent(inout) :: spec_tot(0:lmax)
+        real(kind=real64), intent(inout) :: spec_m0(0:lmax), spec_rest(0:lmax)
         
-        ! Compute Power Spectrum
-        call SHPowerSpectrum(coeffs, lmax, spec_tot)
-    end subroutine get_energy_spectrum
-
-    ! 3. Computes two separate spectra, one for the m=0 mode and one for all the rest
-    subroutine get_m0_spectrum(coeffs, lmax, spec_m0, spec_m_rest)
-        integer, intent(in) :: lmax
-        real(kind=real64), intent(in) :: coeffs(2, lmax+1, lmax+1)
-        real(kind=real64), intent(out) :: spec_m0(lmax+1), spec_m_rest(lmax+1)
-        
-        real(kind=real64) :: spec_tot(lmax+1)
+        real(kind=real64) :: spec(0:lmax)
         integer :: l
         
         ! Get the total power spectrum first
-        call SHPowerSpectrum(coeffs, lmax, spec_tot)
+        call SHPowerSpectrum(coeffs, lmax, spec)
+
+        spec_tot(:) = spec_tot(:) + spec(:)
         
         do l = 0, lmax
-            ! The power at m=0 is just the square of the (1, l+1, 1) coefficient
+            ! The power at m=0 is just the square of the (1, l, 0) coefficient
             ! (assuming default 4-pi normalized harmonics)
-            spec_m0(l+1) = coeffs(1, l+1, 1)**2
+            spec_m0(l) = spec_m0(l) + coeffs(1, l, 0)**2
             
             ! The rest is the total minus the m=0 component
-            spec_m_rest(l+1) = spec_tot(l+1) - spec_m0(l+1)
+            spec_rest(l) = spec_rest(l) + (spec(l) - coeffs(1, l, 0)**2)
         end do
-    end subroutine get_m0_spectrum
+    end subroutine upd_energy_spectrum
+    
+    ! 3. Bins a 2D horizontal spectrum (spec(0:lmax, n_shells)) logarithmically
+    !    into n_bins. Employs CIC interpolation.
+    !    Includes physical volume integration weights (0.5 * spec * r_j^2 * dr).
+    subroutine bin_horizontal_spectrum(spec, lmax, n_shells, r_min, r_max, n_bins, E_K, K_bins)
+        integer,           intent(in)  :: lmax, n_shells, n_bins
+        real(kind=real64), intent(in)  :: spec(0:lmax, n_shells)
+        real(kind=real64), intent(in)  :: r_min, r_max
+        real(kind=real64), intent(out) :: E_K(0:n_bins), K_bins(0:n_bins)
+
+        real(kind=real64) :: pi, dr, log_K_min, log_K_max, inv_delta_log, delta_log
+        real(kind=real64) :: r_j, K_tot, E_contrib, real_idx, w_lo, w_hi
+        integer :: l, j, idx
+
+        pi = 2.0_real64 * asin(1.0_real64)
+        dr = (r_max - r_min) / real(n_shells - 1, real64)
+
+        ! Use identical bin boundaries as the 3D volume spectrum for direct comparability
+        log_K_min     = log(min(sqrt(2.0_real64)/r_max, 2*pi/(r_max-r_min)))
+        log_K_max     = log(real(lmax*(lmax+1), real64)/r_min**2 &
+                  + (2*sqrt(real(n_shells*(n_shells+1), real64))*2*pi/(r_max-r_min))**2) / 2.0_real64
+        delta_log     = (log_K_max - log_K_min) / real(n_bins, real64)
+        inv_delta_log = real(n_bins, real64) / (log_K_max - log_K_min)
+
+        ! Build logarithmic bin centres
+        K_bins(0) = 0.0_real64
+        do j = 1, n_bins
+            K_bins(j) = exp(log_K_min + (real(j, real64) - 0.5_real64) * delta_log)
+        end do
+
+        E_K = 0.0_real64
+
+        ! ---- CIC accumulation ----
+        do j = 1, n_shells
+            r_j = r_min + real(j - 1, real64) * dr
+            do l = 0, lmax
+                ! Physical energy density: 1/2 * (4*pi) * spec * r^2 * dr = 2*pi * spec * r^2 * dr
+                E_contrib = 2.0_real64 * pi * spec(l, j) * r_j**2 * dr
+                if (E_contrib == 0.0_real64) cycle
+
+                K_tot = sqrt(real(l * (l + 1), real64)) / r_j
+
+                ! Guard against log(0) for the DC / zero-wavenumber mode (l=0)
+                if (K_tot <= 0.0_real64) then
+                    E_K(0) = E_K(0) + E_contrib
+                    cycle
+                end if
+
+                real_idx = (log(K_tot) - log_K_min) * inv_delta_log + 0.5_real64
+                idx      = int(real_idx)
+
+                if (idx < 1) then
+                    E_K(1) = E_K(1) + E_contrib
+                else if (idx >= n_bins) then
+                    E_K(n_bins) = E_K(n_bins) + E_contrib
+                else
+                    w_hi         = real_idx - real(idx, real64)
+                    w_lo         = 1.0_real64 - w_hi
+                    E_K(idx)     = E_K(idx)     + E_contrib * w_lo
+                    E_K(idx + 1) = E_K(idx + 1) + E_contrib * w_hi
+                end if
+            end do
+        end do
+
+        ! ---- Normalize by bin width (dK) to get spectral density E(K) ----
+        w_lo = exp(0.5_real64 * delta_log) - exp(-0.5_real64 * delta_log)
+        do j = 1, n_bins
+            E_K(j) = E_K(j) / (K_bins(j) * w_lo)
+        end do
+    end subroutine bin_horizontal_spectrum
 
     ! =========================================================================
     ! VOLUME SPECTRUM ROUTINES
     ! =========================================================================
 
     ! 4. Computes spectral energy density per degree and shell for ONE component.
-    !    energy(l+1, j) = sum_{m=0}^{l} [ C(l,m,j)^2 + S(l,m,j)^2 ]
+    !    energy(l, j) = sum_{m=0}^{l} [ C(l,m,j)^2 + S(l,m,j)^2 ]
     subroutine compute_spectral_energy(coeffs, lmax, n_shells, energy)
         integer, intent(in) :: lmax, n_shells
-        real(kind=real64), intent(in)  :: coeffs(2, lmax+1, lmax+1, n_shells)
-        real(kind=real64), intent(out) :: energy(lmax+1, n_shells)
+        real(kind=real64), intent(in)  :: coeffs(2, 0:lmax, 0:lmax, n_shells)
+        real(kind=real64), intent(out) :: energy(0:lmax, n_shells)
 
         integer :: l, m, j
 
@@ -125,8 +185,8 @@ contains
         do j = 1, n_shells
             do l = 0, lmax
                 do m = 0, l
-                    energy(l+1, j) = energy(l+1, j) &
-                        + coeffs(1, l+1, m+1, j)**2 + coeffs(2, l+1, m+1, j)**2
+                    energy(l, j) = energy(l, j) &
+                        + coeffs(1, l, m, j)**2 + coeffs(2, l, m, j)**2
                 end do
             end do
         end do
@@ -136,9 +196,10 @@ contains
     !    Gaussian sigma = ell / sqrt(12), truncated at 3*sigma.
     !    Boundaries: truncate kernel and renormalize.
     subroutine radial_gaussian_filter(coeffs_in, lmax, n_shells, ell, coeffs_out)
-        integer, intent(in) :: lmax, n_shells, ell
-        real(kind=real64), intent(in)  :: coeffs_in(2, lmax+1, lmax+1, n_shells)
-        real(kind=real64), intent(out) :: coeffs_out(2, lmax+1, lmax+1, n_shells)
+        integer, intent(in) :: lmax, n_shells
+        real(kind=real64), intent(in) :: ell
+        real(kind=real64), intent(in)  :: coeffs_in(2, 0:lmax, 0:lmax, n_shells)
+        real(kind=real64), intent(out) :: coeffs_out(2, 0:lmax, 0:lmax, n_shells)
 
         real(kind=real64) :: sigma, inv_2sig2
         integer :: j_max           ! half-width of the kernel in grid points
@@ -146,7 +207,12 @@ contains
         real(kind=real64) :: norm
         integer :: i, j, j_lo, j_hi, k
 
-        sigma = real(ell, real64) / sqrt(12.0_real64)
+        if (ell <= 1.0e-8_real64) then
+            coeffs_out = coeffs_in
+            return
+        end if
+
+        sigma = ell / sqrt(12.0_real64)
         j_max = min(3 * ceiling(sigma), n_shells - 1)
         inv_2sig2 = 1.0_real64 / (2.0_real64 * sigma * sigma)
 
@@ -178,51 +244,53 @@ contains
         deallocate(w)
     end subroutine radial_gaussian_filter
 
-    ! 6. Aggregates components of the 3D energy map E_modes(l+1, ell, j, c)
+    ! 6. Aggregates components of the 3D energy map E_modes(0:lmax, ell, j, c)
     subroutine accumulate_energy(se_diff, lmax, n_shells, r_min, dr, k, comp, E_modes, parseval_lhs)
         integer,           intent(in)     :: lmax, n_shells, k, comp
-        real(kind=real64), intent(in)     :: se_diff(lmax+1, n_shells)
+        real(kind=real64), intent(in)     :: se_diff(0:lmax, n_shells)
         real(kind=real64), intent(in)     :: r_min, dr
-        real(kind=real64), intent(inout)  :: E_modes(lmax+1, 0:n_shells, n_shells, 3)
+        real(kind=real64), intent(inout)  :: E_modes(0:lmax, 0:n_shells, n_shells, 3)
         real(kind=real64), intent(inout)  :: parseval_lhs
 
-        real(kind=real64) :: r_j, E_dens, h_val
+        real(kind=real64) :: r_j, E_dens, pi
         integer :: l, j
+
+        pi = 2.0_real64 * asin(1.0_real64)
 
         do j = 1, n_shells
             r_j = r_min + real(j - 1, real64) * dr
             do l = 0, lmax
-                E_dens = 0.5_real64 * se_diff(l+1, j) * r_j**2 * dr
-                E_modes(l+1, k, j, comp) = E_modes(l+1, k, j, comp) + E_dens
+                E_dens = 2.0_real64 * pi * se_diff(l, j) * r_j**2 * dr
+                E_modes(l, k, j, comp) = E_modes(l, k, j, comp) + E_dens
                 parseval_lhs = parseval_lhs + E_dens
             end do
         end do
     end subroutine accumulate_energy
 
-    ! 7. Computes the 3D energy map E_modes(l+1, ell, j, c) by sweeping Gaussian
-    !    filter scales over all velocity components. E_modes(l+1, ell, j, c) is
+    ! 7. Computes the 3D energy map E_modes(0:lmax, ell, j, c) by sweeping Gaussian
+    !    filter scales over all velocity components. E_modes(0:lmax, ell, j, c) is
     !    the total kinetic energy contribution from angular degree l, radial
     !    filter scale ell, shell j, and velocity component comp.
     subroutine compute_volume_spectrum(coeffs_all, lmax, n_shells, r_min, dr, E_modes)
         integer,           intent(in)  :: lmax, n_shells
-        real(kind=real64), intent(in)  :: coeffs_all(2, lmax+1, lmax+1, n_shells, 3)
+        real(kind=real64), intent(in)  :: coeffs_all(2, 0:lmax, 0:lmax, n_shells, 3)
         real(kind=real64), intent(in)  :: r_min, dr
-        ! E_modes(l+1, ell, j, comp): energy at degree l, filter scale ell, shell j.
-        ! Dimensions: (lmax+1) x (0:n_shells) x n_shells
-        real(kind=real64), intent(out) :: E_modes(lmax+1, 0:n_shells, n_shells, 3)
+        ! E_modes(0:lmax, ell, j, comp): energy at degree l, filter scale ell, shell j.
+        ! Dimensions: (0:lmax) x (0:n_shells) x n_shells
+        real(kind=real64), intent(out) :: E_modes(0:lmax, 0:n_shells, n_shells, 3)
 
         real(kind=real64), allocatable :: coeffs_filt(:,:,:,:), coeffs_avg(:,:,:,:)
         ! Filter Scale Energy (fse) and Higher Scale Energy (hse)
         real(kind=real64), allocatable :: fse(:,:), hse(:,:)
 
-        real(kind=real64) :: pi, r_j, parseval_lhs, parseval_rhs
-        integer :: comp, ell, l, j, k
+        real(kind=real64) :: pi, r_j, parseval_lhs, parseval_rhs, ell
+        integer :: comp, l, j, k
 
         pi = 2.0_real64 * asin(1.0_real64)
 
-        allocate(coeffs_avg(2, lmax+1, lmax+1, n_shells))
-        allocate(coeffs_filt(2, lmax+1, lmax+1, n_shells))
-        allocate(hse(lmax+1, n_shells), fse(lmax+1, n_shells))
+        allocate(coeffs_avg(2, 0:lmax, 0:lmax, n_shells))
+        allocate(coeffs_filt(2, 0:lmax, 0:lmax, n_shells))
+        allocate(hse(0:lmax, n_shells), fse(0:lmax, n_shells))
 
         E_modes      = 0.0_real64
         parseval_lhs = 0.0_real64
@@ -274,7 +342,7 @@ contains
             do j = 1, n_shells
                 r_j = r_min + real(j - 1, real64) * dr
                 do l = 0, lmax
-                    parseval_rhs = parseval_rhs + 0.5_real64 * fse(l+1, j) * r_j**2 * dr
+                    parseval_rhs = parseval_rhs + 2.0_real64 * pi * fse(l, j) * r_j**2 * dr
                 end do
             end do
 
@@ -292,18 +360,18 @@ contains
         deallocate(coeffs_filt, hse, fse, coeffs_avg)
     end subroutine compute_volume_spectrum
 
-    ! 8. Bins the 3D energy map E_modes(l+1, ell, j) into n_bins logarithmically-
+    ! 8. Bins the 3D energy map E_modes(0:lmax, ell, j) into n_bins logarithmically-
     !    spaced bins.  Bin edges are determined from the theoretical min/max K values.
     !    Uses CIC interpolation between the two nearest bin centres.
     !    mode_flag: 0=all (default), 1=2D flow only, 2=Rest only.
     subroutine bin_spectrum(E_modes, lmax, n_shells, r_min, r_max, n_bins, E_K, K_bins, mode_flag)
         integer,           intent(in)  :: lmax, n_shells, n_bins
-        real(kind=real64), intent(in)  :: E_modes(lmax+1, 0:n_shells, n_shells, 3)
+        real(kind=real64), intent(in)  :: E_modes(0:lmax, 0:n_shells, n_shells, 3)
         real(kind=real64), intent(in)  :: r_min, r_max
         real(kind=real64), intent(out) :: E_K(0:n_bins), K_bins(0:n_bins)
         integer, intent(in), optional  :: mode_flag
 
-        real(kind=real64) :: pi, dr, log_K_min, log_K_max, inv_log_delta, log_delta
+        real(kind=real64) :: pi, dr, log_K_min, log_K_max, inv_delta_log, delta_log
         real(kind=real64) :: r_j, k_ang, k_rad, K_tot, E_contrib, real_idx, w_lo, w_hi
         integer :: l, j, k, comp, idx, flag
 
@@ -319,14 +387,15 @@ contains
 
 
         log_K_min     = log(min(sqrt(2.0_real64)/r_max, 2*pi/(r_max-r_min)))
-        log_K_max     = log(real(lmax * (lmax + 1), real64) / r_min**2 + (2*pi/dr)**2) / 2.0_real64
-        log_delta     = (log_K_max - log_K_min) / real(n_bins, real64)
-        inv_log_delta = real(n_bins, real64) / (log_K_max - log_K_min)
+        log_K_max = log(real(lmax*(lmax+1), real64)/r_min**2 &
+                  + (2*sqrt(real(n_shells*(n_shells+1), real64))*2*pi/(r_max-r_min))**2) / 2.0_real64
+        delta_log     = (log_K_max - log_K_min) / real(n_bins, real64)
+        inv_delta_log = real(n_bins, real64) / (log_K_max - log_K_min)
 
         ! ---- Build logarithmic bin centres directly ----
         K_bins(0) = 0.0_real64
         do j = 1, n_bins
-            K_bins(j) = exp(log_K_min + (real(j, real64) - 0.5_real64) * log_delta)
+            K_bins(j) = exp(log_K_min + (real(j, real64) - 0.5_real64) * delta_log)
         end do
 
         E_K = 0.0_real64
@@ -344,11 +413,9 @@ contains
                     if (flag == 2 .and. (k == 0 .and. comp /= 2)) cycle
 
                     do l = 0, lmax
-                        E_contrib = E_modes(l+1, k, j, comp)
-                        if (E_contrib <= 0.0_real64) cycle
-
-                        k_ang   = sqrt(real(l * (l + 1), real64)) / r_j
-                        k_rad   = real(k, real64) * 2*pi/(r_max-r_min)
+                        E_contrib = E_modes(l, k, j, comp)
+                        k_ang = sqrt(real(l*(l+1), real64)) / r_j
+                        k_rad = 2 * sqrt(real(k*(k+1), real64)) * 2*pi/(r_max-r_min)
                         K_tot = sqrt(k_ang**2 + k_rad**2)
 
                         ! Guard against log(0) for the DC / zero-wavenumber mode (k=0, l=0)
@@ -358,7 +425,7 @@ contains
                         end if
 
                         ! Direct O(1) index relative to bin centres (offset by +0.5)
-                        real_idx = (log(K_tot) - log_K_min) * inv_log_delta + 0.5_real64
+                        real_idx = (log(K_tot) - log_K_min) * inv_delta_log + 0.5_real64
                         idx      = int(real_idx)
 
                         ! CIC: interpolate in logarithmic scale between the two nearest bin centres
@@ -377,7 +444,11 @@ contains
             end do
         end do   ! comp
 
-
+        ! ---- Normalize by bin width (dK) to get spectral density E(K) ----
+        w_lo = exp(0.5_real64 * delta_log) - exp(-0.5_real64 * delta_log)
+        do j = 1, n_bins
+            E_K(j) = E_K(j) / (K_bins(j) * w_lo)
+        end do
     end subroutine bin_spectrum
 
 end module sht_processing_mod
@@ -402,17 +473,19 @@ program sht_3d_utility
 
     real(kind=real64), allocatable :: grid_t(:,:), grid_r(:,:), grid_p(:,:)
     real(kind=real64), allocatable :: coeffs_t(:,:,:), coeffs_r(:,:,:), coeffs_p(:,:,:)
-    real(kind=real64), allocatable :: spec_tot(:), spec_m0(:), spec_m_rest(:)
-    real(kind=real64), allocatable :: spec_tot_3d(:,:), spec_m0_3d(:,:), spec_m_rest_3d(:,:)
+    real(kind=real64), allocatable :: spec_tot(:,:), spec_m0(:,:), spec_rest(:,:)
     
     ! Volume spectrum arrays
     real(kind=real64), allocatable :: coeffs_all(:,:,:,:,:)
     real(kind=real64), allocatable :: E_modes(:,:,:,:)
     real(kind=real64), allocatable :: E_K(:), E2d_K(:), E3d_K(:), K_bins(:)
+    real(kind=real64), allocatable :: E_tot_H(:), E_zonal_H(:), E_rest_H(:)
     real(kind=real64) :: rint, rext, dr
     integer :: n_bins
 
     real(kind=real64) :: vx, vy, vz
+    real(kind=real64) :: E_phys, d_theta, d_phi, r_j
+    real(kind=real64) :: E_binned_sum, log_K_min, log_K_max, delta_log, w_hi
 
     ! 1. Parse Command Line
     arg_count = command_argument_count()
@@ -492,26 +565,43 @@ program sht_3d_utility
         stop 1
     end if
     
+    ! Calculate total physical energy from the spatial grid
+    E_phys = 0.0_real64
+    d_phi = pi / real(n3-1, real64)
+    d_theta = 2.0_real64 * pi / real(n1-1, real64)
+    do k = 1, n3
+        phi = real(k-1, real64) * pi / real(n3-1, real64)
+        sp = sin(phi)
+        do j = 1, n2
+            r_j = rint + real(j-1, real64) * dr
+            ! Only sum i=1 to n1-1 since i=n1 is a periodic copy of i=1
+            do i = 1, n1-1
+                E_phys = E_phys + 0.5_real64 * (vt(i,j,k)**2 + vr(i,j,k)**2 + vp(i,j,k)**2) * &
+                         r_j**2 * dr * d_theta * d_phi * sp
+            end do
+        end do
+    end do
+    write(*,'(A, ES14.7)') "   Total Physical Energy (Grid sum) : ", E_phys
+
     ! We don't need the original arrays anymore
     deallocate(v1, v2, v3)
 
     ! 4. Setup SHT Parameters
-    n_lat = n3 - 1
+    n_lat = n3 - mod(n3, 2)
     n_lon = n1 - 1
     lmax = n_lat / 2 - 1
 
     allocate(grid_t(n_lat, n_lon), grid_r(n_lat, n_lon), grid_p(n_lat, n_lon))
-    allocate(coeffs_t(2, lmax+1, lmax+1), coeffs_r(2, lmax+1, lmax+1), coeffs_p(2, lmax+1, lmax+1))
-    allocate(spec_tot(lmax+1), spec_m0(lmax+1), spec_m_rest(lmax+1))
+    allocate(coeffs_t(2, 0:lmax, 0:lmax), coeffs_r(2, 0:lmax, 0:lmax), coeffs_p(2, 0:lmax, 0:lmax))
     
-    allocate(spec_tot_3d(lmax+1, n2), spec_m0_3d(lmax+1, n2), spec_m_rest_3d(lmax+1, n2))
+    allocate(spec_tot(0:lmax, n2), spec_m0(0:lmax, n2), spec_rest(0:lmax, n2))
     
     ! Allocate storage for all SH coefficients (all shells, all 3 components)
-    allocate(coeffs_all(2, lmax+1, lmax+1, n2, 3))
+    allocate(coeffs_all(2, 0:lmax, 0:lmax, n2, 3))
 
-    spec_tot_3d = 0.0_real64
-    spec_m0_3d = 0.0_real64
-    spec_m_rest_3d = 0.0_real64
+    spec_tot = 0.0_real64
+    spec_m0 = 0.0_real64
+    spec_rest = 0.0_real64
 
     write(*,*) "-> Performing SHT on Velocity Field..."
     do j = 1, n2
@@ -531,27 +621,12 @@ program sht_3d_utility
         coeffs_all(:, :, :, j, 3) = coeffs_p
 
         ! Call Subroutine 2: Get Energy Spectra
-        call get_energy_spectrum(coeffs_t, lmax, spec_tot)
-        spec_tot_3d(:, j) = spec_tot_3d(:, j) + spec_tot(:)
-        
-        call get_energy_spectrum(coeffs_r, lmax, spec_tot)
-        spec_tot_3d(:, j) = spec_tot_3d(:, j) + spec_tot(:)
-        
-        call get_energy_spectrum(coeffs_p, lmax, spec_tot)
-        spec_tot_3d(:, j) = spec_tot_3d(:, j) + spec_tot(:)
-
-        ! Call Subroutine 3: Get m=0 and m!=0 Spectra
-        call get_m0_spectrum(coeffs_t, lmax, spec_m0, spec_m_rest)
-        spec_m0_3d(:, j) = spec_m0_3d(:, j) + spec_m0(:)
-        spec_m_rest_3d(:, j) = spec_m_rest_3d(:, j) + spec_m_rest(:)
-        
-        call get_m0_spectrum(coeffs_r, lmax, spec_m0, spec_m_rest)
-        spec_m0_3d(:, j) = spec_m0_3d(:, j) + spec_m0(:)
-        spec_m_rest_3d(:, j) = spec_m_rest_3d(:, j) + spec_m_rest(:)
-        
-        call get_m0_spectrum(coeffs_p, lmax, spec_m0, spec_m_rest)
-        spec_m0_3d(:, j) = spec_m0_3d(:, j) + spec_m0(:)
-        spec_m_rest_3d(:, j) = spec_m_rest_3d(:, j) + spec_m_rest(:)
+        call upd_energy_spectrum(coeffs_t, lmax, spec_tot(:, j), &
+                                 spec_m0(:, j), spec_rest(:, j))
+        call upd_energy_spectrum(coeffs_r, lmax, spec_tot(:, j), &
+                                 spec_m0(:, j), spec_rest(:, j))
+        call upd_energy_spectrum(coeffs_p, lmax, spec_tot(:, j), &
+                                 spec_m0(:, j), spec_rest(:, j))
 
         if (mod(j, 25) == 0) write(*,*) "      Progress: shell ", j, "/", n2
     end do
@@ -559,41 +634,64 @@ program sht_3d_utility
     deallocate(vt, vr, vp)
     deallocate(grid_t, grid_r, grid_p)
     deallocate(coeffs_t, coeffs_r, coeffs_p)
-    deallocate(spec_tot, spec_m0, spec_m_rest)
-
-    ! 5. Output the Three Per-Shell Spectra
-    out_file = 'spectrum.dat'
     
-    write(*,*) "-> Saving horizontal Spectrum to: ", trim(out_file)
+    ! 5. Bin the horizontal spectra
+    ! Number of logarithmic bins (~12 per octave)
+    n_bins = max(64, nint(8 * log(real(max(lmax, n2), real64)) / log(2.0_real64)))
+    ! Bin the 3 horizontal spectra logarithmically
+    allocate(E_tot_H(0:n_bins), E_zonal_H(0:n_bins), E_rest_H(0:n_bins), K_bins(0:n_bins))
+    
+    write(*,*) "-> Computing binned Horizontal Spectra..."
+    call bin_horizontal_spectrum(spec_tot, lmax, n2, rint, rext, n_bins, E_tot_H, K_bins)
+    call bin_horizontal_spectrum(spec_m0, lmax, n2, rint, rext, n_bins, E_zonal_H, K_bins)
+    call bin_horizontal_spectrum(spec_rest, lmax, n2, rint, rext, n_bins, E_rest_H, K_bins)
+    
+    ! 6. Output the 3 spectra
+    out_file = 'horizontal_spectrum.dat'
+    write(*,*) "-> Saving binned Horizontal Spectra to: ", trim(out_file)
     open(unit=out_unit, file=trim(out_file), status='replace')
-    write(out_unit, '(A)') "# L-degree | Radial Index | Total Energy Spectrum | Zonal Energy Spectrum (m=0) | Residual Energy Spectrum (m!=0)"
-    do j = 1, n2
-        do i = 0, lmax
-            write(out_unit, '(I6, I6, E15.7, E15.7, E15.7)') i, j, spec_tot_3d(i+1, j), spec_m0_3d(i+1, j), spec_m_rest_3d(i+1, j)
-        end do
-        write(out_unit, *)
+    write(out_unit, '(A)') "# k | E_tot_H(k) | E_zonal_H(k) | E_rest_H(k)"
+    do i = 0, n_bins
+        if (E_tot_H(i) > 0.0_real64) then
+            write(out_unit, '(ES15.7, ES15.7, ES15.7, ES15.7)') K_bins(i), E_tot_H(i), E_zonal_H(i), E_rest_H(i)
+        end if
     end do
     close(out_unit)
 
-    deallocate(spec_tot_3d, spec_m0_3d, spec_m_rest_3d)
+    deallocate(E_tot_H, E_zonal_H, E_rest_H)
+    deallocate(spec_tot, spec_m0, spec_rest)
+    deallocate(K_bins)
 
-    ! 6. Compute and Output the 3D Volume Spectrum E(K)
+    ! 7. Compute and Output the 3D Volume Spectrum E(K)
     write(*,*) "-> Computing 3D Volume Spectrum E(K)..."
 
-    ! E_modes(l+1, ell, j): energy at degree l, filter scale ell, shell j, component
-    allocate(E_modes(lmax+1, 0:n2, n2, 3))
+    ! E_modes(0:lmax, ell, j): energy at degree l, filter scale ell, shell j, component
+    allocate(E_modes(0:lmax, 0:n2, n2, 3))
 
     call compute_volume_spectrum(coeffs_all, lmax, n2, rint, dr, E_modes)
     deallocate(coeffs_all)
 
-    ! Number of logarithmic bins (~50 per octave)
-    n_bins = max(64, nint(50 * log(real(max(lmax, n2), real64)) / log(2.0_real64)))
-    allocate(E_K(0:n_bins), K_bins(0:n_bins))
+    allocate(E_K(0:n_bins), K_bins(0:n_bins), E2d_K(0:n_bins), E3d_K(0:n_bins))
     call bin_spectrum(E_modes, lmax, n2, rint, rext, n_bins, E_K, K_bins)
-
-    allocate(E2d_K(0:n_bins), E3d_K(0:n_bins))
     call bin_spectrum(E_modes, lmax, n2, rint, rext, n_bins, E2d_K, K_bins, 1)
     call bin_spectrum(E_modes, lmax, n2, rint, rext, n_bins, E3d_K, K_bins, 2)
+
+    ! Compute integral of binned spectrum sum(E_K * dK)
+    delta_log = log(K_bins(2) / K_bins(1))
+    w_hi = exp(0.5_real64 * delta_log) - exp(-0.5_real64 * delta_log)
+    
+    E_binned_sum = E_K(0) ! DC mode doesn't have a width in the log bins
+    do i = 1, n_bins
+        E_binned_sum = E_binned_sum + E_K(i) * K_bins(i) * w_hi
+    end do
+
+    write(*,'(A)')          "   --- Final Physical Parseval Check ---"
+    write(*,'(A, ES14.7)')  "       Physical Energy (Grid sum)   : ", E_phys
+    write(*,'(A, ES14.7)')  "       Integral of Binned Spectrum  : ", E_binned_sum
+    if (E_phys > 0.0_real64) then
+        write(*,'(A, F8.4, A)') "       Relative difference: ", &
+            abs(E_binned_sum - E_phys) / E_phys * 100.0_real64, " %"
+    end if
 
     deallocate(E_modes)
 

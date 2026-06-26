@@ -111,7 +111,6 @@ program compute_spectrum
   read(in_unit) epsil, epsil, re, sim_time
 
   allocate(E_field(n1, n2, n3), v1(n1, n2, n3), v2(n1, n2, n3), v3(n1, n2, n3), pr(n1, n2, n3))
-  ! Read all 5 fields from the single record written by outpf/bounn.f
   read(in_unit) E_field, v1, v2, v3, pr
   close(in_unit)
 
