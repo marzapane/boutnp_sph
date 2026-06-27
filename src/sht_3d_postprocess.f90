@@ -375,8 +375,17 @@ contains
         real(kind=real64) :: r_j, k_ang, k_rad, K_tot, E_contrib, real_idx, w_lo, w_hi
         integer :: l, j, k, comp, idx, flag
 
+        ! ! DEBUG ONLY: Local arrays to count elements per bin (remove later)
+        ! real(kind=real64) :: count_K(0:n_bins)
+        ! ! DEBUG ONLY: 2D table of K_tot for each (radius j, filter k, degree l) (remove later)
+        ! real(kind=real64), allocatable :: K_tot_table(:,:)
+        ! integer :: debug_unit
+        ! character(len=64) :: debug_fname
+
         flag = 0
         if (present(mode_flag)) flag = mode_flag
+
+        ! count_K = 0.0_real64 ! DEBUG ONLY
 
         pi = 2.0_real64 * asin(1.0_real64)
         dr = (r_max - r_min) / real(n_shells - 1, real64)
@@ -400,6 +409,10 @@ contains
 
         E_K = 0.0_real64
 
+        ! ! DEBUG ONLY: Allocate K_tot table (rows = (j,l) pairs, cols = k values) (remove later)
+        ! allocate(K_tot_table(n_shells * (lmax + 1), 0:n_shells))
+        ! K_tot_table = 0.0_real64
+
         ! ---- CIC accumulation ----
         do comp = 1, 3
             ! mode_flag = 1: 2D flow (only k=0 and horizontal components vt, vp)
@@ -418,9 +431,14 @@ contains
                         k_rad = 2 * sqrt(real(k*(k+1), real64)) * 2*pi/(r_max-r_min)
                         K_tot = sqrt(k_ang**2 + k_rad**2)
 
+                        ! ! DEBUG ONLY: Capture K_tot for comp==1 and flag==0 (remove later)
+                        ! if (flag == 0 .and. comp == 1) &
+                        !     K_tot_table((j-1)*(lmax+1) + l + 1, k) = K_tot
+
                         ! Guard against log(0) for the DC / zero-wavenumber mode (k=0, l=0)
                         if (K_tot <= 0.0_real64) then
                             E_K(0) = E_K(0) + E_contrib
+                            ! count_K(0) = count_K(0) + 1.0_real64 ! DEBUG ONLY
                             cycle
                         end if
 
@@ -431,13 +449,17 @@ contains
                         ! CIC: interpolate in logarithmic scale between the two nearest bin centres
                         if (idx < 1) then
                             E_K(1) = E_K(1) + E_contrib
+                            ! count_K(1) = count_K(1) + 1.0_real64 ! DEBUG ONLY
                         else if (idx >= n_bins) then
                             E_K(n_bins) = E_K(n_bins) + E_contrib
+                            ! count_K(n_bins) = count_K(n_bins) + 1.0_real64 ! DEBUG ONLY
                         else
                             w_hi         = real_idx - real(idx, real64)
                             w_lo         = 1.0_real64 - w_hi
                             E_K(idx)     = E_K(idx)     + E_contrib * w_lo
                             E_K(idx + 1) = E_K(idx + 1) + E_contrib * w_hi
+                            ! count_K(idx)     = count_K(idx)     + w_lo ! DEBUG ONLY
+                            ! count_K(idx + 1) = count_K(idx + 1) + w_hi ! DEBUG ONLY
                         end if
                     end do
                 end do
@@ -448,7 +470,36 @@ contains
         w_lo = exp(0.5_real64 * delta_log) - exp(-0.5_real64 * delta_log)
         do j = 1, n_bins
             E_K(j) = E_K(j) / (K_bins(j) * w_lo)
+            ! count_K(j) = count_K(j) / (K_bins(j) * w_lo) ! DEBUG ONLY
         end do
+
+        ! ! DEBUG ONLY: Write mode counts to file directly (remove later)
+        ! debug_unit = 98
+        ! if (flag == 0) then
+        !     debug_fname = 'binning_count.dat'
+        ! else if (flag == 1) then
+        !     debug_fname = 'binning_count_2d.dat'
+        ! else
+        !     debug_fname = 'binning_count_3d.dat'
+        ! end if
+        ! open(unit=debug_unit, file=trim(debug_fname), status='replace')
+        ! write(debug_unit, '(A)') "# k | normalized_count"
+        ! do j = 0, n_bins
+        !     write(debug_unit, '(ES15.7, ES15.7)') K_bins(j), count_K(j)
+        ! end do
+        ! close(debug_unit)
+
+        ! ! DEBUG ONLY: Write K_tot table to file and deallocate (remove later)
+        ! if (flag == 0) then
+        !     debug_unit = 99
+        !     open(unit=debug_unit, file='ktot_table.dat', status='replace')
+        !     write(debug_unit, '(A)') '# K_tot table: rows=(j,l) pairs j=1..N_shells l=0..lmax, cols=k values k=0..N_shells'
+        !     do j = 1, n_shells * (lmax + 1)
+        !         write(debug_unit, '(*(ES12.4, 1X))') K_tot_table(j, :)
+        !     end do
+        !     close(debug_unit)
+        ! end if
+        ! deallocate(K_tot_table)
     end subroutine bin_spectrum
 
 end module sht_processing_mod
