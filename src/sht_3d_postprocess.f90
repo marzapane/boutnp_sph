@@ -377,15 +377,35 @@ contains
         call SHExpandDH(grid, n_lat, coeffs, lmax, lmax_calc=lmax_calc, sampling=2)
     end subroutine get_sht_coeffs
 
-    ! 2. Computes the horizontal spectra for ONE velocity component across all shells,
-    !    accumulating on the fly into binner.
-    subroutine compute_horizontal_spectrum_comp(coeffs_comp, lmax, n_shells, binner)
-        integer,                 intent(in)    :: lmax, n_shells
-        real(kind=real64),       intent(in)    :: coeffs_comp(2, 0:lmax, 0:lmax, n_shells)
+    ! 2. Packs the 2D spherical harmonic coefficients for 0 <= m <= l into a contiguous 1D array
+    !    where mode (l, m) is stored at index lm = (l * (l + 1)) / 2 + m + 1.
+    !    Entries with m > l in the SHTOOLS square output are mathematically zero and are omitted,
+    !    cutting coefficient storage by ~50%.
+    subroutine pack_sht_coeffs(coeffs_shell, lmax, n_lm, coeffs_packed)
+        integer,           intent(in)  :: lmax, n_lm
+        real(kind=real64), intent(in)  :: coeffs_shell(2, 0:lmax, 0:lmax)
+        real(kind=real64), intent(out) :: coeffs_packed(2, n_lm)
+
+        integer :: l, m, lm
+
+        do l = 0, lmax
+            lm = (l * (l + 1)) / 2 + 1
+            do m = 0, l
+                coeffs_packed(1, lm + m) = coeffs_shell(1, l, m)
+                coeffs_packed(2, lm + m) = coeffs_shell(2, l, m)
+            end do
+        end do
+    end subroutine pack_sht_coeffs
+
+    ! 3. Computes the horizontal spectra for ONE velocity component across all shells,
+    !    accumulating on the fly into binner using triangularly packed (l, m) coefficients.
+    subroutine compute_horizontal_spectrum_comp(coeffs_comp, lmax, n_lm, n_shells, binner)
+        integer,                 intent(in)    :: lmax, n_lm, n_shells
+        real(kind=real64),       intent(in)    :: coeffs_comp(2, n_lm, n_shells)
         type(spectral_binner_t), intent(inout) :: binner
 
         real(kind=real64), allocatable :: spec_m0(:,:), spec_rest(:,:)
-        integer :: j, l, m
+        integer :: j, l, m, lm_base
 
         allocate(spec_m0(0:lmax, n_shells), spec_rest(0:lmax, n_shells))
         spec_m0   = 0.0_real64
@@ -393,13 +413,14 @@ contains
 
         do j = 1, n_shells
             do l = 0, lmax
-                ! The power at m=0 is just the square of the (1, l, 0) coefficient
-                ! (assuming default 4-pi normalized harmonics)
-                spec_m0(l, j) = coeffs_comp(1, l, 0, j)**2
+                lm_base = (l * (l + 1)) / 2 + 1
+                ! The power at m=0 is the square of the cosine coefficient (1, lm_base, j)
+                ! (assuming default 4-pi normalized spherical harmonics)
+                spec_m0(l, j) = coeffs_comp(1, lm_base, j)**2
                 do m = 1, l
                     ! The rest is the total minus the m=0 component
                     spec_rest(l, j) = spec_rest(l, j) + &
-                        coeffs_comp(1, l, m, j)**2 + coeffs_comp(2, l, m, j)**2
+                        coeffs_comp(1, lm_base + m, j)**2 + coeffs_comp(2, lm_base + m, j)**2
                 end do
             end do
         end do
@@ -412,106 +433,141 @@ contains
     ! VOLUME SPECTRUM ROUTINES
     ! =========================================================================
 
-    ! 4. Computes spectral energy density per degree and shell for ONE component.
-    !    energy(l, j) = sum_{m=0}^{l} [ C(l,m,j)^2 + S(l,m,j)^2 ]
-    subroutine compute_spectral_energy(coeffs, lmax, n_shells, energy)
-        integer, intent(in) :: lmax, n_shells
-        real(kind=real64), intent(in)  :: coeffs(2, 0:lmax, 0:lmax, n_shells)
-        real(kind=real64), intent(out) :: energy(0:lmax, n_shells)
+    ! 4. Computes filtered spectral energy density fse(0:lmax, 1:n_shells) for ONE component,
+    !    fusing 1D radial Gaussian convolution along pencils of packed (l, m) modes
+    !    directly with the spectral energy sum over m = 0..l:
+    !      fse(l, i) = sum_{m=0}^l [ C_filt(l,m,i)^2 + S_filt(l,m,i)^2 ]
+    !    This completely eliminates 4D intermediate arrays (coeffs_filt, coeffs_avg) and
+    !    avoids convolving non-physical m > l zero coefficients.
+    !
+    !    Filter scale behavior controlled by ell:
+    !      - ell < 0.0 : Infinite filter scale (k = 0), radial average over all shells.
+    !                    Represents the depth-independent (radially uniform) mean flow.
+    !      - ell == 0.0: Unfiltered scale (k = n_shells, k_max), raw coefficient energy.
+    !      - ell > 0.0 : Gaussian low-pass filter with width ell along the radial coordinate.
+    subroutine compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, ell, fse)
+        integer,           intent(in)  :: lmax, n_lm, n_shells
+        real(kind=real64), intent(in)  :: coeffs_comp(2, n_lm, n_shells)
+        real(kind=real64), intent(in)  :: ell
+        real(kind=real64), intent(out) :: fse(0:lmax, n_shells)
 
-        integer :: l, m, j
+        real(kind=real64) :: c_filt(0:lmax), s_filt(0:lmax)
+        real(kind=real64) :: sigma, inv_2sig2, norm, e_sum, e_l
+        integer :: j_max, j_lo, j_hi, i, j, k_sh, l, m, lm_base
+        real(kind=real64), allocatable :: w(:)
 
-        energy = 0.0_real64
-        do j = 1, n_shells
+        if (ell < 0.0_real64) then
+            ! Case 1: k = 0 infinite filter scale (radial average over all shells).
+            ! Accumulates coefficients across j = 1..n_shells, divides by n_shells,
+            ! and sums (C_avg^2 + S_avg^2) over m = 0..l.
             do l = 0, lmax
+                lm_base = (l * (l + 1)) / 2 + 1
+                c_filt(0:l) = 0.0_real64
+                s_filt(0:l) = 0.0_real64
+                do j = 1, n_shells
+                    do m = 0, l
+                        c_filt(m) = c_filt(m) + coeffs_comp(1, lm_base + m, j)
+                        s_filt(m) = s_filt(m) + coeffs_comp(2, lm_base + m, j)
+                    end do
+                end do
+                e_l = 0.0_real64
                 do m = 0, l
-                    energy(l, j) = energy(l, j) &
-                        + coeffs(1, l, m, j)**2 + coeffs(2, l, m, j)**2
+                    e_l = e_l + (c_filt(m) / real(n_shells, real64))**2 &
+                              + (s_filt(m) / real(n_shells, real64))**2
+                end do
+                fse(l, 1:n_shells) = e_l
+            end do
+
+        else if (abs(ell) <= 1.0e-8_real64) then
+            ! Case 2: k = n_shells unfiltered scale (ell = 0, highest radial wavenumber).
+            ! Raw spectral energy density: fse(l, j) = sum_{m=0}^l [ C(l,m,j)^2 + S(l,m,j)^2 ]
+            do j = 1, n_shells
+                do l = 0, lmax
+                    lm_base = (l * (l + 1)) / 2 + 1
+                    e_sum = 0.0_real64
+                    do m = 0, l
+                        e_sum = e_sum + coeffs_comp(1, lm_base + m, j)**2 &
+                                      + coeffs_comp(2, lm_base + m, j)**2
+                    end do
+                    fse(l, j) = e_sum
                 end do
             end do
-        end do
-    end subroutine compute_spectral_energy
 
-    ! 5. Applies a 1-D Gaussian low-pass filter along the radial (shell) direction.
-    !    Gaussian sigma = ell / sqrt(12), truncated at 3*sigma.
-    !    Boundaries: truncate kernel and renormalize.
-    subroutine radial_gaussian_filter(coeffs_in, lmax, n_shells, ell, coeffs_out)
-        integer, intent(in) :: lmax, n_shells
-        real(kind=real64), intent(in) :: ell
-        real(kind=real64), intent(in)  :: coeffs_in(2, 0:lmax, 0:lmax, n_shells)
-        real(kind=real64), intent(out) :: coeffs_out(2, 0:lmax, 0:lmax, n_shells)
+        else
+            ! Case 3: Finite Gaussian filter scale (1 <= k <= n_shells - 1).
+            ! Gaussian low-pass kernel: sigma = ell / sqrt(12), truncated at 3*sigma.
+            sigma = ell / sqrt(12.0_real64)
+            j_max = min(3 * ceiling(sigma), n_shells - 1)
+            inv_2sig2 = 1.0_real64 / (2.0_real64 * sigma * sigma)
 
-        real(kind=real64) :: sigma, inv_2sig2
-        integer :: j_max           ! half-width of the kernel in grid points
-        real(kind=real64), allocatable :: w(:)   ! kernel weights, 0:2*j_max
-        real(kind=real64) :: norm
-        integer :: i, j, j_lo, j_hi, k
-
-        if (ell <= 1.0e-8_real64) then
-            coeffs_out = coeffs_in
-            return
-        end if
-
-        sigma = ell / sqrt(12.0_real64)
-        j_max = min(3 * ceiling(sigma), n_shells - 1)
-        inv_2sig2 = 1.0_real64 / (2.0_real64 * sigma * sigma)
-
-        ! Pre-compute symmetric kernel weights  w(0) .. w(2*j_max)
-        !   w(k) = exp( -(k - j_max)^2 / (2 sigma^2) )
-        allocate(w(0:2*j_max))
-        do j = 0, 2*j_max
-            w(j) = exp(-real((j - j_max)**2, real64) * inv_2sig2)
-        end do
-
-        ! Convolve each coefficient independently along the shell (j) direction
-        coeffs_out = 0.0_real64
-        do i = 1, n_shells
-            ! Clamp the kernel window to stay within [1, n_shells]
-            j_lo = max(0, j_max - (i - 1))       ! first valid kernel index
-            j_hi = min(2*j_max, j_max + (n_shells - i))  ! last valid kernel index
-
-            ! Accumulate weighted sum and normalisation
-            norm = 0.0_real64
-            do j = j_lo, j_hi
-                k = i + (j - j_max)             ! shell index being sampled
-                coeffs_out(:, :, :, i) = coeffs_out(:, :, :, i) &
-                    + w(j) * coeffs_in(:, :, :, k)
-                norm = norm + w(j)
+            ! Precompute symmetric Gaussian kernel weights w(0:2*j_max):
+            !   w(k) = exp( -(k - j_max)^2 / (2 sigma^2) )
+            allocate(w(0:2*j_max))
+            do j = 0, 2*j_max
+                w(j) = exp(-real((j - j_max)**2, real64) * inv_2sig2)
             end do
-            coeffs_out(:, :, :, i) = coeffs_out(:, :, :, i) / norm
-        end do
 
-        deallocate(w)
-    end subroutine radial_gaussian_filter
+            ! Convolve each 1D radial pencil across shells and accumulate energy directly into fse(l, i).
+            ! Innermost loop runs over contiguous m = 0..l (packed index lm_base + m) for cache
+            ! locality and SIMD vectorization; the outer j loop strides across shells.
+            ! Boundaries are handled by truncating the kernel to [j_lo, j_hi] and renormalizing by norm.
+            !$OMP PARALLEL DO PRIVATE(i, j_lo, j_hi, norm, l, lm_base, c_filt, s_filt, j, k_sh, m, e_sum) &
+            !$OMP SCHEDULE(STATIC)
+            do i = 1, n_shells
+                ! Clamp kernel window to stay within valid shell range [1, n_shells]
+                j_lo = max(0, j_max - (i - 1))
+                j_hi = min(2*j_max, j_max + (n_shells - i))
 
-    ! 6. Computes the 3D volume spectrum for ONE velocity component by sweeping
-    !    Gaussian filter scales, accumulating on the fly into binner.
-    subroutine compute_volume_spectrum_comp(coeffs_comp, lmax, n_shells, comp, binner)
-        integer,                 intent(in)    :: lmax, n_shells, comp
-        real(kind=real64),       intent(in)    :: coeffs_comp(2, 0:lmax, 0:lmax, n_shells)
+                norm = 0.0_real64
+                do j = j_lo, j_hi
+                    norm = norm + w(j)
+                end do
+
+                do l = 0, lmax
+                    lm_base = (l * (l + 1)) / 2 + 1
+                    c_filt(0:l) = 0.0_real64
+                    s_filt(0:l) = 0.0_real64
+                    do j = j_lo, j_hi
+                        k_sh = i + (j - j_max)
+                        do m = 0, l
+                            c_filt(m) = c_filt(m) + w(j) * coeffs_comp(1, lm_base + m, k_sh)
+                            s_filt(m) = s_filt(m) + w(j) * coeffs_comp(2, lm_base + m, k_sh)
+                        end do
+                    end do
+                    e_sum = 0.0_real64
+                    do m = 0, l
+                        e_sum = e_sum + (c_filt(m) / norm)**2 + (s_filt(m) / norm)**2
+                    end do
+                    fse(l, i) = e_sum
+                end do
+            end do
+            !$OMP END PARALLEL DO
+
+            deallocate(w)
+        end if
+    end subroutine compute_filtered_spectral_energy
+
+    ! 5. Computes the 3D volume spectrum for ONE velocity component by sweeping
+    !    radial Gaussian filter scales (MSCG coarse-graining), accumulating on the fly into binner.
+    !
+    !    Rationale:
+    !      A field filtered at radial scale ell has cumulative energy of all scales < ell.
+    !      Pair-wise differences (fse - hse) between consecutive filter scales isolate the
+    !      spectral energy in radial wavenumber band k.
+    subroutine compute_volume_spectrum_comp(coeffs_comp, lmax, n_lm, n_shells, comp, binner)
+        integer,                 intent(in)    :: lmax, n_lm, n_shells, comp
+        real(kind=real64),       intent(in)    :: coeffs_comp(2, n_lm, n_shells)
         type(spectral_binner_t), intent(inout) :: binner
 
-        real(kind=real64), allocatable :: coeffs_filt(:,:,:,:), coeffs_avg(:,:,:,:)
         ! Filter Scale Energy (fse) and Higher Scale Energy (hse)
         real(kind=real64), allocatable :: fse(:,:), hse(:,:)
-
         real(kind=real64) :: ell
-        integer :: j, k
+        integer :: k
 
-        allocate(coeffs_avg(2, 0:lmax, 0:lmax, n_shells))
-        allocate(coeffs_filt(2, 0:lmax, 0:lmax, n_shells))
         allocate(hse(0:lmax, n_shells), fse(0:lmax, n_shells))
 
-        ! k = 0 means infinite filtering scale, i.e. simple averaging
-        coeffs_avg = 0.0_real64
-        do j = 1, n_shells
-            coeffs_avg(:,:,:,1) = coeffs_avg(:,:,:,1) + coeffs_comp(:,:,:,j)
-        end do
-        coeffs_avg(:,:,:,1) = coeffs_avg(:,:,:,1) / n_shells
-        do j = 2, n_shells
-            coeffs_avg(:,:,:,j) = coeffs_avg(:,:,:,1)
-        end do
-        call compute_spectral_energy(coeffs_avg, lmax, n_shells, fse)
+        ! k = 0 means infinite filtering scale, i.e. simple radial averaging across all shells
+        call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, -1.0_real64, fse)
 
         ! Accumulate energy contribution on the fly (k = 0)
         call binner%accumulate_volume_energy(fse, 0, comp)
@@ -522,14 +578,12 @@ contains
         ! ---- Sweep over radial filter scales ----
         ! Field filtered at scale ell has cumulative energy of all scales < ell.
         ! Pair-wise differences represents energy between the 2 filtering scales.
-        do k = 1, n_shells-1
-            ! ell = N/2 / sqrt(k(k+1))    : geometric average between N/2k and N/2(k+1)
+        do k = 1, n_shells - 1
+            ! ell = N/2 / sqrt(k(k+1)) : geometric average between N/2k and N/2(k+1)
             ell = 0.5_real64 * real(n_shells, real64) / sqrt(real(k*(k+1), real64))
 
-            call radial_gaussian_filter(coeffs_comp, lmax, n_shells, &
-                                        ell, coeffs_filt)
-            call compute_spectral_energy(coeffs_filt, lmax, n_shells, fse)
-            call binner%accumulate_volume_energy(fse-hse, k, comp)
+            call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, ell, fse)
+            call binner%accumulate_volume_energy(fse - hse, k, comp)
             hse = fse
 
             if ((mod(k, n_shells/4) == 0).and.(n_shells > 64)) write(*,'(A,I4,A,I4,A,I2)') &
@@ -537,10 +591,10 @@ contains
         end do   ! k
 
         ! Unfiltered spectral energy (k_max => ell = 0)
-        call compute_spectral_energy(coeffs_comp, lmax, n_shells, fse)
-        call binner%accumulate_volume_energy(fse-hse, n_shells, comp)
+        call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, 0.0_real64, fse)
+        call binner%accumulate_volume_energy(fse - hse, n_shells, comp)
 
-        deallocate(coeffs_filt, hse, fse, coeffs_avg)
+        deallocate(hse, fse)
     end subroutine compute_volume_spectrum_comp
 
 
@@ -554,7 +608,7 @@ program sht_3d_utility
     use sht_processing_mod
     implicit none
 
-    integer :: n1, n2, n3, lmax, n_lat, n_lon
+    integer :: n1, n2, n3, lmax, n_lat, n_lon, n_lm
     integer :: arg_count, i, j, k, io_status, last_slash
     real(kind=real64) :: sim_time, pi, phi, sp
 
@@ -569,8 +623,8 @@ program sht_3d_utility
     real(kind=real64), allocatable :: grid_2d(:,:)
     real(kind=real64), allocatable :: coeffs_shell(:,:,:)
 
-    ! Spectral arrays and binners
-    real(kind=real64), allocatable :: coeffs_comp(:,:,:,:)
+    ! Spectral arrays and binners (coeffs_comp is packed triangularly as (2, n_lm, n2))
+    real(kind=real64), allocatable :: coeffs_comp(:,:,:)
     type(spectral_binner_t) :: binner_H, binner_E
     real(kind=real64) :: rint, rext, dr
     integer :: n_bins, comp
@@ -649,10 +703,11 @@ program sht_3d_utility
     n_lat = n3 - mod(n3, 2)
     n_lon = n1 - 1
     lmax = n_lat / 2 - 1
+    n_lm = ((lmax + 1) * (lmax + 2)) / 2
 
     allocate(grid_2d(n_lat, n_lon))
     allocate(coeffs_shell(2, 0:lmax, 0:lmax))
-    allocate(coeffs_comp(2, 0:lmax, 0:lmax, n2))
+    allocate(coeffs_comp(2, n_lm, n2))
 
     ! Number of logarithmic bins (~12 per octave)
     n_bins = max(64, nint(12 * log(real(max(lmax, n2), real64)) / log(2.0_real64)))
@@ -675,16 +730,16 @@ program sht_3d_utility
             end select
 
             call get_sht_coeffs(grid_2d, n_lat, lmax, coeffs_shell)
-            coeffs_comp(:, :, :, j) = coeffs_shell
+            call pack_sht_coeffs(coeffs_shell, lmax, n_lm, coeffs_comp(:, :, j))
 
             if (mod(j, 25) == 0) write(*,*) "      Progress: shell ", j, "/", n2
         end do
 
         write(*,*) "   -> Computing Horizontal Spectra contribution..."
-        call compute_horizontal_spectrum_comp(coeffs_comp, lmax, n2, binner_H)
+        call compute_horizontal_spectrum_comp(coeffs_comp, lmax, n_lm, n2, binner_H)
 
         write(*,*) "   -> Computing 3D Volume Spectrum contribution..."
-        call compute_volume_spectrum_comp(coeffs_comp, lmax, n2, comp, binner_E)
+        call compute_volume_spectrum_comp(coeffs_comp, lmax, n_lm, n2, comp, binner_E)
     end do
 
     deallocate(vt, vr, vp)
