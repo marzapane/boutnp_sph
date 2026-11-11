@@ -20,11 +20,12 @@ module data_io_mod
 
 contains
 
-    subroutine read_simulation_data(file_path, n1, n2, n3, sim_time, vt, vr, vp)
+    subroutine read_simulation_data(file_path, n1, n2, n3, sim_time, vt, vr, vp, coord_type)
         character(len=*), intent(in) :: file_path
         integer, intent(out) :: n1, n2, n3
         real(kind=real64), intent(out) :: sim_time
         real(kind=real64), allocatable, intent(out) :: vt(:,:,:), vr(:,:,:), vp(:,:,:)
+        character(len=*), intent(in) :: coord_type
 
         integer :: in_unit = 10, io_status, dummy_int, k
         real(kind=real64) :: epsil, re
@@ -49,7 +50,50 @@ contains
         deallocate(dummy_slice)
         close(in_unit)
 
+        call convert_to_spherical(vt, vr, vp, n1, n2, n3, coord_type)
+
     end subroutine read_simulation_data
+
+    subroutine convert_to_spherical(vt, vr, vp, n1, n2, n3, coord_type)
+        real(kind=real64), intent(inout) :: vt(:,:,:), vr(:,:,:), vp(:,:,:)
+        integer, intent(in) :: n1, n2, n3
+        character(len=*), intent(in) :: coord_type
+
+        real(kind=real64), parameter :: pi = 2.0_real64 * asin(1.0_real64)
+        real(kind=real64) :: phi, cp, sp, theta, ct, st, vx, vy, vz
+        integer :: i, j, k
+
+        if (trim(coord_type) == '-p') then
+            write(*,*) "-> Using spherical velocity components directly (vt, vr, vp)."
+        else if (trim(coord_type) == '-c') then
+            write(*,*) "-> Converting Cartesian velocity components to spherical..."
+            do k = 1, n3
+                ! Colatitude (polar angle phi) varies along k
+                phi = real(k-1, real64) * pi / real(n3-1, real64)
+                cp = cos(phi)
+                sp = sin(phi)
+                do j = 1, n2
+                    do i = 1, n1
+                        ! Longitude (azimuthal angle theta) varies along i
+                        theta = real(i-1, real64) * 2.0_real64 * pi / real(n1-1, real64)
+                        ct = cos(theta)
+                        st = sin(theta)
+
+                        vx = vt(i, j, k)
+                        vy = vr(i, j, k)
+                        vz = vp(i, j, k)
+
+                        vt(i, j, k) = -vx*st    + vy*ct
+                        vr(i, j, k) =  vx*sp*ct + vy*sp*st + vz*cp
+                        vp(i, j, k) =  vx*cp*ct + vy*cp*st - vz*sp
+                    end do
+                end do
+            end do
+        else
+            write(error_unit, '("Error: Unknown coordinate type option. Must be ''-p'' or ''-c''.")')
+            stop 1
+        end if
+    end subroutine convert_to_spherical
 
 end module data_io_mod
 
@@ -519,7 +563,7 @@ program sht_3d_utility
 
     integer :: n1, n2, n3, lmax, n_lat, n_lon
     integer :: arg_count, i, j, k, io_status, last_slash
-    real(kind=real64) :: sim_time, pi, theta, phi, ct, st, cp, sp
+    real(kind=real64) :: sim_time, pi, phi, sp
 
     character(len=256) :: input_path, coord_type, out_file, r_arg, arg
     integer :: arg_idx
@@ -538,7 +582,6 @@ program sht_3d_utility
     real(kind=real64) :: rint, rext, dr
     integer :: n_bins
 
-    real(kind=real64) :: vx, vy, vz
     real(kind=real64) :: E_phys, d_theta, d_phi, r_j
     real(kind=real64) :: E_binned_sum, log_K_min, log_K_max, delta_log, w_hi
 
@@ -584,47 +627,14 @@ program sht_3d_utility
     write(*, '(A, F10.4, A, F10.4)') "   Inner radius: ", rint, "   Outer radius: ", rext
 
     ! 2. Read Data
-    call read_simulation_data(input_path, n1, n2, n3, sim_time, vt, vr, vp)
+    call read_simulation_data(input_path, n1, n2, n3, sim_time, vt, vr, vp, coord_type)
     write(*, '(A, 3(I0, A), F10.4)') "   Dimensions: ", n1, "x", n2, "x", n3, " at time ", sim_time
 
     ! Compute radial spacing (uniform grid, shell thickness = 1)
     dr = (rext - rint) / real(n2 - 1, real64)
 
-    ! 3. Handle Velocity Field Appropriately (Polar vs Cartesian)
-    pi = 2.0_real64 * asin(1.0_real64)
-
-    if (trim(coord_type) == '-p') then
-        write(*,*) "-> Using spherical velocity components directly (vt, vr, vp)."
-    else if (trim(coord_type) == '-c') then
-        write(*,*) "-> Converting Cartesian velocity components to spherical..."
-        do k = 1, n3
-            ! Colatitude (polar angle phi) varies along k
-            phi = real(k-1, real64) * pi / real(n3-1, real64)
-            cp = cos(phi)
-            sp = sin(phi)
-            do j = 1, n2
-                do i = 1, n1
-                    ! Longitude (azimuthal angle theta) varies along i
-                    theta = real(i-1, real64) * 2.0_real64 * pi / real(n1-1, real64)
-                    ct = cos(theta)
-                    st = sin(theta)
-
-                    vx = vt(i, j, k)
-                    vy = vr(i, j, k)
-                    vz = vp(i, j, k)
-
-                    vt(i, j, k) = -vx*st    + vy*ct
-                    vr(i, j, k) =  vx*sp*ct + vy*sp*st + vz*cp
-                    vp(i, j, k) =  vx*cp*ct + vy*cp*st - vz*sp
-                end do
-            end do
-        end do
-    else
-        write(error_unit, '("Error: Unknown coordinate type option. Must be ''-p'' or ''-c''.")')
-        stop 1
-    end if
-
     ! Calculate total physical energy from the spatial grid
+    pi = 2.0_real64 * asin(1.0_real64)
     E_phys = 0.0_real64
     d_phi = pi / real(n3-1, real64)
     d_theta = 2.0_real64 * pi / real(n1-1, real64)
@@ -642,7 +652,7 @@ program sht_3d_utility
     end do
     write(*,'(A, ES14.7)') "   Total Physical Energy (Grid sum) : ", E_phys
 
-    ! 4. Setup SHT Parameters
+    ! 3. Setup SHT Parameters
     n_lat = n3 - mod(n3, 2)
     n_lon = n1 - 1
     lmax = n_lat / 2 - 1
@@ -677,7 +687,7 @@ program sht_3d_utility
     deallocate(grid_t, grid_r, grid_p)
     deallocate(coeffs_t, coeffs_r, coeffs_p)
 
-    ! 5. Compute and Output Horizontal Spectra
+    ! 4. Compute and Output Horizontal Spectra
     ! Number of logarithmic bins (~12 per octave)
     n_bins = max(64, nint(12 * log(real(max(lmax, n2), real64)) / log(2.0_real64)))
 
@@ -686,7 +696,7 @@ program sht_3d_utility
     call compute_horizontal_spectrum(coeffs_all, lmax, n2, binner_H)
     call binner_H%normalize()
 
-    ! 6. Output the horizontal spectra
+    ! 5. Output the horizontal spectra
     last_slash = scan(trim(input_path), '/', back=.true.)
     if (last_slash > 0) then
         out_file = input_path(1:last_slash) // 'h_spec.dat'
@@ -706,7 +716,7 @@ program sht_3d_utility
 
     call binner_H%destroy()
 
-    ! 7. Compute and Output the 3D Volume Spectrum E(K)
+    ! 6. Compute and Output the 3D Volume Spectrum E(K)
     write(*,*) "-> Computing 3D Volume Spectrum E(K)..."
 
     call binner_E%init(lmax, n2, rint, rext, n_bins)
