@@ -377,38 +377,36 @@ contains
         call SHExpandDH(grid, n_lat, coeffs, lmax, lmax_calc=lmax_calc, sampling=2)
     end subroutine get_sht_coeffs
 
-    ! 2. Computes the horizontal spectra (total, m=0, and m/=0) across all shells,
+    ! 2. Computes the horizontal spectra for ONE velocity component across all shells,
     !    accumulating on the fly into binner.
-    subroutine compute_horizontal_spectrum(coeffs_all, lmax, n_shells, binner)
+    subroutine compute_horizontal_spectrum_comp(coeffs_comp, lmax, n_shells, binner)
         integer,                 intent(in)    :: lmax, n_shells
-        real(kind=real64),       intent(in)    :: coeffs_all(2, 0:lmax, 0:lmax, n_shells, 3)
+        real(kind=real64),       intent(in)    :: coeffs_comp(2, 0:lmax, 0:lmax, n_shells)
         type(spectral_binner_t), intent(inout) :: binner
 
         real(kind=real64), allocatable :: spec_m0(:,:), spec_rest(:,:)
-        integer :: comp, j, l, m
+        integer :: j, l, m
 
         allocate(spec_m0(0:lmax, n_shells), spec_rest(0:lmax, n_shells))
         spec_m0   = 0.0_real64
         spec_rest = 0.0_real64
 
-        do comp = 1, 3
-            do j = 1, n_shells
-                do l = 0, lmax
-                    ! The power at m=0 is just the square of the (1, l, 0) coefficient
-                    ! (assuming default 4-pi normalized harmonics)
-                    spec_m0(l, j) = spec_m0(l, j) + coeffs_all(1, l, 0, j, comp)**2
-                    do m = 1, l
-                        ! The rest is the total minus the m=0 component
-                        spec_rest(l, j) = spec_rest(l, j) + &
-                            coeffs_all(1, l, m, j, comp)**2 + coeffs_all(2, l, m, j, comp)**2
-                    end do
+        do j = 1, n_shells
+            do l = 0, lmax
+                ! The power at m=0 is just the square of the (1, l, 0) coefficient
+                ! (assuming default 4-pi normalized harmonics)
+                spec_m0(l, j) = coeffs_comp(1, l, 0, j)**2
+                do m = 1, l
+                    ! The rest is the total minus the m=0 component
+                    spec_rest(l, j) = spec_rest(l, j) + &
+                        coeffs_comp(1, l, m, j)**2 + coeffs_comp(2, l, m, j)**2
                 end do
             end do
         end do
 
         call binner%accumulate_horizontal_energy(spec_m0, spec_rest)
         deallocate(spec_m0, spec_rest)
-    end subroutine compute_horizontal_spectrum
+    end subroutine compute_horizontal_spectrum_comp
 
     ! =========================================================================
     ! VOLUME SPECTRUM ROUTINES
@@ -486,11 +484,11 @@ contains
         deallocate(w)
     end subroutine radial_gaussian_filter
 
-    ! 6. Computes the 3D volume spectrum by sweeping Gaussian filter scales
-    !    over all velocity components, accumulating on the fly into binner.
-    subroutine compute_volume_spectrum(coeffs_all, lmax, n_shells, binner)
-        integer,                 intent(in)    :: lmax, n_shells
-        real(kind=real64),       intent(in)    :: coeffs_all(2, 0:lmax, 0:lmax, n_shells, 3)
+    ! 6. Computes the 3D volume spectrum for ONE velocity component by sweeping
+    !    Gaussian filter scales, accumulating on the fly into binner.
+    subroutine compute_volume_spectrum_comp(coeffs_comp, lmax, n_shells, comp, binner)
+        integer,                 intent(in)    :: lmax, n_shells, comp
+        real(kind=real64),       intent(in)    :: coeffs_comp(2, 0:lmax, 0:lmax, n_shells)
         type(spectral_binner_t), intent(inout) :: binner
 
         real(kind=real64), allocatable :: coeffs_filt(:,:,:,:), coeffs_avg(:,:,:,:)
@@ -498,57 +496,52 @@ contains
         real(kind=real64), allocatable :: fse(:,:), hse(:,:)
 
         real(kind=real64) :: ell
-        integer :: comp, j, k
+        integer :: j, k
 
         allocate(coeffs_avg(2, 0:lmax, 0:lmax, n_shells))
         allocate(coeffs_filt(2, 0:lmax, 0:lmax, n_shells))
         allocate(hse(0:lmax, n_shells), fse(0:lmax, n_shells))
 
-        ! ==== Loop over velocity components ====
-        do comp = 1, 3
+        ! k = 0 means infinite filtering scale, i.e. simple averaging
+        coeffs_avg = 0.0_real64
+        do j = 1, n_shells
+            coeffs_avg(:,:,:,1) = coeffs_avg(:,:,:,1) + coeffs_comp(:,:,:,j)
+        end do
+        coeffs_avg(:,:,:,1) = coeffs_avg(:,:,:,1) / n_shells
+        do j = 2, n_shells
+            coeffs_avg(:,:,:,j) = coeffs_avg(:,:,:,1)
+        end do
+        call compute_spectral_energy(coeffs_avg, lmax, n_shells, fse)
 
-            ! k = 0 means infinite filtering scale, i.e. simple averaging
-            coeffs_avg = 0.0_real64
-            do j = 1, n_shells
-                coeffs_avg(:,:,:,1) = coeffs_avg(:,:,:,1) + coeffs_all(:,:,:,j,comp)
-            end do
-            coeffs_avg(:,:,:,1) = coeffs_avg(:,:,:,1) / n_shells
-            do j = 2, n_shells
-                coeffs_avg(:,:,:,j) = coeffs_avg(:,:,:,1)
-            end do
-            call compute_spectral_energy(coeffs_avg(:,:,:,:), lmax, n_shells, fse)
+        ! Accumulate energy contribution on the fly (k = 0)
+        call binner%accumulate_volume_energy(fse, 0, comp)
 
-            ! Accumulate energy contribution on the fly (k = 0)
-            call binner%accumulate_volume_energy(fse, 0, comp)
+        ! Set hse: first iteration (k = 1) differentiates against k = 0 state
+        hse = fse
 
-            ! Set hse: first iteration (k = 1) differentiates against k = 0 state
+        ! ---- Sweep over radial filter scales ----
+        ! Field filtered at scale ell has cumulative energy of all scales < ell.
+        ! Pair-wise differences represents energy between the 2 filtering scales.
+        do k = 1, n_shells-1
+            ! ell = N/2 / sqrt(k(k+1))    : geometric average between N/2k and N/2(k+1)
+            ell = 0.5_real64 * real(n_shells, real64) / sqrt(real(k*(k+1), real64))
+
+            call radial_gaussian_filter(coeffs_comp, lmax, n_shells, &
+                                        ell, coeffs_filt)
+            call compute_spectral_energy(coeffs_filt, lmax, n_shells, fse)
+            call binner%accumulate_volume_energy(fse-hse, k, comp)
             hse = fse
 
-            ! ---- Sweep over radial filter scales ----
-            ! Field filtered at scale ell has cumulative energy of all scales < ell.
-            ! Pair-wise differences represents energy between the 2 filtering scales.
-            do k = 1, n_shells-1
-                ! ell = N/2 / sqrt(k(k+1))    : geometric average between N/2k and N/2(k+1)
-                ell = 0.5_real64 * real(n_shells, real64) / sqrt(real(k*(k+1), real64))
+            if ((mod(k, n_shells/4) == 0).and.(n_shells > 64)) write(*,'(A,I4,A,I4,A,I2)') &
+                "      k = ", k, " * 2*pi/(", n_shells, "dr),   component ", comp
+        end do   ! k
 
-                call radial_gaussian_filter(coeffs_all(:,:,:,:,comp), lmax, n_shells, &
-                                            ell, coeffs_filt)
-                call compute_spectral_energy(coeffs_filt, lmax, n_shells, fse)
-                call binner%accumulate_volume_energy(fse-hse, k, comp)
-                hse = fse
-
-                if ((mod(k, n_shells/4) == 0).and.(n_shells > 64)) write(*,'(A,I4,A,I4,A,I2)') &
-                    "      k = ", k, " * 2*pi/(", n_shells, "dr),   component ", comp
-            end do   ! k
-
-            ! Unfiltered spectral energy (k_max => ell = 0)
-            call compute_spectral_energy(coeffs_all(:,:,:,:,comp), lmax, n_shells, fse)
-            call binner%accumulate_volume_energy(fse-hse, n_shells, comp)
-
-        end do   ! comp
+        ! Unfiltered spectral energy (k_max => ell = 0)
+        call compute_spectral_energy(coeffs_comp, lmax, n_shells, fse)
+        call binner%accumulate_volume_energy(fse-hse, n_shells, comp)
 
         deallocate(coeffs_filt, hse, fse, coeffs_avg)
-    end subroutine compute_volume_spectrum
+    end subroutine compute_volume_spectrum_comp
 
 
 end module sht_processing_mod
@@ -573,17 +566,17 @@ program sht_3d_utility
     ! Velocity in spherical coordinates (vt=azimuthal/zonal, vr=radial, vp=polar/meridional)
     real(kind=real64), allocatable :: vt(:,:,:), vr(:,:,:), vp(:,:,:)
 
-    real(kind=real64), allocatable :: grid_t(:,:), grid_r(:,:), grid_p(:,:)
-    real(kind=real64), allocatable :: coeffs_t(:,:,:), coeffs_r(:,:,:), coeffs_p(:,:,:)
+    real(kind=real64), allocatable :: grid_2d(:,:)
+    real(kind=real64), allocatable :: coeffs_shell(:,:,:)
 
     ! Spectral arrays and binners
-    real(kind=real64), allocatable :: coeffs_all(:,:,:,:,:)
+    real(kind=real64), allocatable :: coeffs_comp(:,:,:,:)
     type(spectral_binner_t) :: binner_H, binner_E
     real(kind=real64) :: rint, rext, dr
-    integer :: n_bins
+    integer :: n_bins, comp
 
     real(kind=real64) :: E_phys, d_theta, d_phi, r_j
-    real(kind=real64) :: E_binned_sum, log_K_min, log_K_max, delta_log, w_hi
+    real(kind=real64) :: E_binned_sum, delta_log, w_hi
 
     ! 1. Parse Command Line
     arg_count = command_argument_count()
@@ -652,51 +645,54 @@ program sht_3d_utility
     end do
     write(*,'(A, ES14.7)') "   Total Physical Energy (Grid sum) : ", E_phys
 
-    ! 3. Setup SHT Parameters
+    ! 3. Setup SHT Parameters and Binners
     n_lat = n3 - mod(n3, 2)
     n_lon = n1 - 1
     lmax = n_lat / 2 - 1
 
-    allocate(grid_t(n_lat, n_lon), grid_r(n_lat, n_lon), grid_p(n_lat, n_lon))
-    allocate(coeffs_t(2, 0:lmax, 0:lmax), coeffs_r(2, 0:lmax, 0:lmax), coeffs_p(2, 0:lmax, 0:lmax))
+    allocate(grid_2d(n_lat, n_lon))
+    allocate(coeffs_shell(2, 0:lmax, 0:lmax))
+    allocate(coeffs_comp(2, 0:lmax, 0:lmax, n2))
 
-    ! Allocate storage for all SH coefficients (all shells, all 3 components)
-    allocate(coeffs_all(2, 0:lmax, 0:lmax, n2, 3))
-
-    write(*,*) "-> Performing SHT on Velocity Field..."
-    do j = 1, n2
-        ! Extract 2D spherical slices, transpose to (lat, lon) format for SHTOOLS
-        grid_t(:, :) = transpose(vt(1:n_lon, j, 1:n_lat))
-        grid_r(:, :) = transpose(vr(1:n_lon, j, 1:n_lat))
-        grid_p(:, :) = transpose(vp(1:n_lon, j, 1:n_lat))
-
-        ! Call Subroutine 1: Get Coefficients
-        call get_sht_coeffs(grid_t, n_lat, lmax, coeffs_t)
-        call get_sht_coeffs(grid_r, n_lat, lmax, coeffs_r)
-        call get_sht_coeffs(grid_p, n_lat, lmax, coeffs_p)
-
-        ! Store coefficients for spectral processing
-        coeffs_all(:, :, :, j, 1) = coeffs_t
-        coeffs_all(:, :, :, j, 2) = coeffs_r
-        coeffs_all(:, :, :, j, 3) = coeffs_p
-
-        if (mod(j, 25) == 0) write(*,*) "      Progress: shell ", j, "/", n2
-    end do
-
-    deallocate(vt, vr, vp)
-    deallocate(grid_t, grid_r, grid_p)
-    deallocate(coeffs_t, coeffs_r, coeffs_p)
-
-    ! 4. Compute and Output Horizontal Spectra
     ! Number of logarithmic bins (~12 per octave)
     n_bins = max(64, nint(12 * log(real(max(lmax, n2), real64)) / log(2.0_real64)))
 
-    write(*,*) "-> Computing Horizontal Spectra..."
     call binner_H%init(lmax, n2, rint, rext, n_bins)
-    call compute_horizontal_spectrum(coeffs_all, lmax, n2, binner_H)
+    call binner_E%init(lmax, n2, rint, rext, n_bins)
+
+    ! Stream velocity components one by one through SHT and spectral binning
+    do comp = 1, 3
+        write(*, '(A, I1, A)') "-> Processing velocity component ", comp, "/3 (SHT + MSCG)..."
+        do j = 1, n2
+            ! Extract 2D spherical slices, transpose to (lat, lon) format for SHTOOLS
+            select case (comp)
+            case (1)
+                grid_2d(:, :) = transpose(vt(1:n_lon, j, 1:n_lat))
+            case (2)
+                grid_2d(:, :) = transpose(vr(1:n_lon, j, 1:n_lat))
+            case (3)
+                grid_2d(:, :) = transpose(vp(1:n_lon, j, 1:n_lat))
+            end select
+
+            call get_sht_coeffs(grid_2d, n_lat, lmax, coeffs_shell)
+            coeffs_comp(:, :, :, j) = coeffs_shell
+
+            if (mod(j, 25) == 0) write(*,*) "      Progress: shell ", j, "/", n2
+        end do
+
+        write(*,*) "   -> Computing Horizontal Spectra contribution..."
+        call compute_horizontal_spectrum_comp(coeffs_comp, lmax, n2, binner_H)
+
+        write(*,*) "   -> Computing 3D Volume Spectrum contribution..."
+        call compute_volume_spectrum_comp(coeffs_comp, lmax, n2, comp, binner_E)
+    end do
+
+    deallocate(vt, vr, vp)
+    deallocate(grid_2d, coeffs_shell, coeffs_comp)
+
+    ! 4. Output Horizontal Spectra
     call binner_H%normalize()
 
-    ! 5. Output the horizontal spectra
     last_slash = scan(trim(input_path), '/', back=.true.)
     if (last_slash > 0) then
         out_file = input_path(1:last_slash) // 'h_spec.dat'
@@ -716,12 +712,7 @@ program sht_3d_utility
 
     call binner_H%destroy()
 
-    ! 6. Compute and Output the 3D Volume Spectrum E(K)
-    write(*,*) "-> Computing 3D Volume Spectrum E(K)..."
-
-    call binner_E%init(lmax, n2, rint, rext, n_bins)
-    call compute_volume_spectrum(coeffs_all, lmax, n2, binner_E)
-    deallocate(coeffs_all)
+    ! 5. Output 3D Volume Spectrum E(K)
     call binner_E%normalize()
 
     ! Parseval check: integrate binned spectrum as sum(E_K * dK)
