@@ -20,15 +20,15 @@ module data_io_mod
 
 contains
 
-    subroutine read_simulation_data(file_path, n1, n2, n3, sim_time, v1, v2, v3)
+    subroutine read_simulation_data(file_path, n1, n2, n3, sim_time, vt, vr, vp)
         character(len=*), intent(in) :: file_path
         integer, intent(out) :: n1, n2, n3
         real(kind=real64), intent(out) :: sim_time
-        real(kind=real64), allocatable, intent(out) :: v1(:,:,:), v2(:,:,:), v3(:,:,:)
+        real(kind=real64), allocatable, intent(out) :: vt(:,:,:), vr(:,:,:), vp(:,:,:)
 
-        integer :: in_unit = 10, io_status, dummy_int
+        integer :: in_unit = 10, io_status, dummy_int, k
         real(kind=real64) :: epsil, re
-        real(kind=real64), allocatable :: field_temp(:,:,:), pr(:,:,:)
+        real(kind=real64), allocatable :: dummy_slice(:,:)
 
         write(*,*) "-> Reading data from: ", trim(file_path)
         open(unit=in_unit, file=trim(file_path), form='unformatted', status='old', action='read', iostat=io_status)
@@ -41,11 +41,12 @@ contains
         read(in_unit) n1, n2, n3
         read(in_unit) epsil, epsil, re, sim_time
 
-        allocate(field_temp(n1, n2, n3), pr(n1, n2, n3))
-        allocate(v1(n1, n2, n3), v2(n1, n2, n3), v3(n1, n2, n3))
+        allocate(dummy_slice(n1, n2))
+        allocate(vt(n1, n2, n3), vr(n1, n2, n3), vp(n1, n2, n3))
 
-        ! Read all fields (standard output format from outpf)
-        read(in_unit) field_temp, v1, v2, v3, pr
+        ! Read fields (dummy_slice skips field_temp; pr is skipped at end of record)
+        read(in_unit) (dummy_slice, k = 1, n3), vt, vr, vp
+        deallocate(dummy_slice)
         close(in_unit)
 
     end subroutine read_simulation_data
@@ -56,11 +57,9 @@ end module data_io_mod
 module sht_processing_mod
     use, intrinsic :: iso_fortran_env, only: real64, error_unit
     use SHTOOLS, only: SHExpandDH, SHPowerSpectrum
-    use fitpack, only: fitpack_curve, FITPACK_SUCCESS, FITPACK_MESSAGE, FP_FLAG
     implicit none
 
     real(kind=real64), parameter, private :: pi = 2.0_real64 * asin(1.0_real64)
-    real(kind=real64) :: s_factor_mult = 0.005_real64
 
 contains
 
@@ -248,12 +247,11 @@ contains
     end subroutine radial_gaussian_filter
 
     ! 6. Aggregates components of the 3D energy map E_modes(0:lmax, ell, j, c)
-    subroutine accumulate_energy(se_diff, lmax, n_shells, r_min, dr, k, comp, E_modes, parseval_lhs)
+    subroutine accumulate_energy(se_diff, lmax, n_shells, r_min, dr, k, comp, E_modes)
         integer,           intent(in)     :: lmax, n_shells, k, comp
         real(kind=real64), intent(in)     :: se_diff(0:lmax, n_shells)
         real(kind=real64), intent(in)     :: r_min, dr
         real(kind=real64), intent(inout)  :: E_modes(0:lmax, 0:n_shells, n_shells, 3)
-        real(kind=real64), intent(inout)  :: parseval_lhs
 
         real(kind=real64) :: r_j, E_dens
         integer :: l, j
@@ -263,7 +261,6 @@ contains
             do l = 0, lmax
                 E_dens = 2.0_real64 * pi * se_diff(l, j) * r_j**2 * dr
                 E_modes(l, k, j, comp) = E_modes(l, k, j, comp) + E_dens
-                parseval_lhs = parseval_lhs + E_dens
             end do
         end do
     end subroutine accumulate_energy
@@ -284,7 +281,7 @@ contains
         ! Filter Scale Energy (fse) and Higher Scale Energy (hse)
         real(kind=real64), allocatable :: fse(:,:), hse(:,:)
 
-        real(kind=real64) :: r_j, parseval_lhs, parseval_rhs, ell
+        real(kind=real64) :: r_j, ell
         integer :: comp, l, j, k
 
         allocate(coeffs_avg(2, 0:lmax, 0:lmax, n_shells))
@@ -292,8 +289,6 @@ contains
         allocate(hse(0:lmax, n_shells), fse(0:lmax, n_shells))
 
         E_modes      = 0.0_real64
-        parseval_lhs = 0.0_real64
-        parseval_rhs = 0.0_real64
 
         ! ==== Loop over velocity components ====
         do comp = 1, 3
@@ -310,7 +305,7 @@ contains
             call compute_spectral_energy(coeffs_avg(:,:,:,:), lmax, n_shells, fse)
 
             ! Accumulate energy contribution into the 3D map (k = 0)
-            call accumulate_energy(fse, lmax, n_shells, r_min, dr, 0, comp, E_modes, parseval_lhs)
+            call accumulate_energy(fse, lmax, n_shells, r_min, dr, 0, comp, E_modes)
 
             ! Set hse: first iteration (k = 1) differentiates against k = 0 state
             hse = fse
@@ -326,35 +321,18 @@ contains
                                             ell, coeffs_filt)
                 call compute_spectral_energy(coeffs_filt, lmax, n_shells, fse)
                 call accumulate_energy(fse-hse, lmax, n_shells, r_min, dr, k, comp, &
-                                       E_modes, parseval_lhs)
+                                       E_modes)
                 hse = fse
 
-                if (mod(k, 25) == 0) write(*,'(A,I4,A,I4,A,I2)') &
+                if ((mod(k, n_shells/4) == 0).and.(n_shells > 64)) write(*,'(A,I4,A,I4,A,I2)') &
                     "      k = ", k, " * 2*pi/(", n_shells, "dr),   component ", comp
-            end do   ! ek
+            end do   ! k
 
             ! Unfiltered spectral energy (k_max => ell = 0)
             call compute_spectral_energy(coeffs_all(:,:,:,:,comp), lmax, n_shells, fse)
-            call accumulate_energy(fse-hse, lmax, n_shells, r_min, dr, n_shells, comp, E_modes, parseval_lhs)
-
-            ! Parseval RHS: total energy from original field (last fse = unfiltered)
-            do j = 1, n_shells
-                r_j = r_min + real(j - 1, real64) * dr
-                do l = 0, lmax
-                    parseval_rhs = parseval_rhs + 2.0_real64 * pi * fse(l, j) * r_j**2 * dr
-                end do
-            end do
+            call accumulate_energy(fse-hse, lmax, n_shells, r_min, dr, n_shells, comp, E_modes)
 
         end do   ! comp
-
-        ! ---- Parseval diagnostic ----
-        write(*,'(A)')          "   --- Parseval energy-conservation check ---"
-        write(*,'(A, ES14.7)')  "       Binned spectrum sum  : ", parseval_lhs
-        write(*,'(A, ES14.7)')  "       Direct original integral  : ", parseval_rhs
-        if (parseval_rhs > 0.0_real64) then
-            write(*,'(A, F8.4, A)') "       Relative difference: ", &
-                abs(parseval_lhs - parseval_rhs) / parseval_rhs * 100.0_real64, " %"
-        end if
 
         deallocate(coeffs_filt, hse, fse, coeffs_avg)
     end subroutine compute_volume_spectrum
@@ -363,28 +341,22 @@ contains
     !    spaced bins.  Bin edges are determined from the theoretical min/max K values.
     !    Uses CIC interpolation between the two nearest bin centres.
     !    mode_flag: 0=all (default), 1=2D flow only, 2=Rest only.
-    subroutine bin_spectrum(E_modes, lmax, n_shells, r_min, r_max, n_bins, E_K, K_bins, mode_flag)
+    subroutine bin_spectrum(E_modes, lmax, n_shells, r_min, r_max, n_bins, E_K, K_bins, count_K, mode_flag)
         integer,           intent(in)  :: lmax, n_shells, n_bins
         real(kind=real64), intent(in)  :: E_modes(0:lmax, 0:n_shells, n_shells, 3)
         real(kind=real64), intent(in)  :: r_min, r_max
         real(kind=real64), intent(out) :: E_K(0:n_bins), K_bins(0:n_bins)
+        real(kind=real64), intent(out) :: count_K(0:n_bins)
         integer, intent(in), optional  :: mode_flag
 
         real(kind=real64) :: dr, log_K_min, log_K_max, inv_delta_log, delta_log
         real(kind=real64) :: r_j, k_ang, k_rad, K_tot, E_contrib, real_idx, w_lo, w_hi
         integer :: l, j, k, comp, idx, flag
 
-        ! ! DEBUG ONLY: Local arrays to count elements per bin (remove later)
-        ! real(kind=real64) :: count_K(0:n_bins)
-        ! ! DEBUG ONLY: 2D table of K_tot for each (radius j, filter k, degree l) (remove later)
-        ! real(kind=real64), allocatable :: K_tot_table(:,:)
-        ! integer :: debug_unit
-        ! character(len=64) :: debug_fname
-
         flag = 0
         if (present(mode_flag)) flag = mode_flag
 
-        ! count_K = 0.0_real64 ! DEBUG ONLY
+        count_K = 0.0_real64
 
         dr = (r_max - r_min) / real(n_shells - 1, real64)
 
@@ -407,10 +379,6 @@ contains
 
         E_K = 0.0_real64
 
-        ! ! DEBUG ONLY: Allocate K_tot table (rows = (j,l) pairs, cols = k values) (remove later)
-        ! allocate(K_tot_table(n_shells * (lmax + 1), 0:n_shells))
-        ! K_tot_table = 0.0_real64
-
         ! ---- CIC accumulation ----
         do comp = 1, 3
             ! mode_flag = 1: 2D flow (only horizontal components vt, vp)
@@ -429,14 +397,10 @@ contains
                         k_rad = 2 * sqrt(real(k*(k+1), real64)) * 2*pi/(r_max-r_min)
                         K_tot = sqrt(k_ang**2 + k_rad**2)
 
-                        ! ! DEBUG ONLY: Capture K_tot for comp==1 and flag==0 (remove later)
-                        ! if (flag == 0 .and. comp == 1) &
-                        !     K_tot_table((j-1)*(lmax+1) + l + 1, k) = K_tot
-
                         ! Guard against log(0) for the DC / zero-wavenumber mode (k=0, l=0)
                         if (K_tot <= 0.0_real64) then
                             E_K(0) = E_K(0) + E_contrib
-                            ! count_K(0) = count_K(0) + 1.0_real64 ! DEBUG ONLY
+                            count_K(0) = count_K(0) + 1.0_real64
                             cycle
                         end if
 
@@ -447,17 +411,17 @@ contains
                         ! CIC: interpolate in logarithmic scale between the two nearest bin centres
                         if (idx < 1) then
                             E_K(1) = E_K(1) + E_contrib
-                            ! count_K(1) = count_K(1) + 1.0_real64 ! DEBUG ONLY
+                            count_K(1) = count_K(1) + 1.0_real64
                         else if (idx >= n_bins) then
                             E_K(n_bins) = E_K(n_bins) + E_contrib
-                            ! count_K(n_bins) = count_K(n_bins) + 1.0_real64 ! DEBUG ONLY
+                            count_K(n_bins) = count_K(n_bins) + 1.0_real64
                         else
                             w_hi         = real_idx - real(idx, real64)
                             w_lo         = 1.0_real64 - w_hi
                             E_K(idx)     = E_K(idx)     + E_contrib * w_lo
                             E_K(idx + 1) = E_K(idx + 1) + E_contrib * w_hi
-                            ! count_K(idx)     = count_K(idx)     + w_lo ! DEBUG ONLY
-                            ! count_K(idx + 1) = count_K(idx + 1) + w_hi ! DEBUG ONLY
+                            count_K(idx)     = count_K(idx)     + w_lo
+                            count_K(idx + 1) = count_K(idx + 1) + w_hi
                         end if
                     end do
                 end do
@@ -468,354 +432,11 @@ contains
         w_lo = exp(0.5_real64 * delta_log) - exp(-0.5_real64 * delta_log)
         do j = 1, n_bins
             E_K(j) = E_K(j) / (K_bins(j) * w_lo)
-            ! count_K(j) = count_K(j) / (K_bins(j) * w_lo) ! DEBUG ONLY
+            count_K(j) = count_K(j) / (K_bins(j) * w_lo)
         end do
 
-        ! ! DEBUG ONLY: Write mode counts to file directly (remove later)
-        ! debug_unit = 98
-        ! if (flag == 0) then
-        !     debug_fname = 'binning_count.dat'
-        ! else if (flag == 1) then
-        !     debug_fname = 'binning_count_2d.dat'
-        ! else
-        !     debug_fname = 'binning_count_3d.dat'
-        ! end if
-        ! open(unit=debug_unit, file=trim(debug_fname), status='replace')
-        ! write(debug_unit, '(A)') "# k | normalized_count"
-        ! do j = 0, n_bins
-        !     write(debug_unit, '(ES15.7, ES15.7)') K_bins(j), count_K(j)
-        ! end do
-        ! close(debug_unit)
-
-        ! ! DEBUG ONLY: Write K_tot table to file and deallocate (remove later)
-        ! if (flag == 0) then
-        !     debug_unit = 99
-        !     open(unit=debug_unit, file='ktot_table.dat', status='replace')
-        !     write(debug_unit, '(A)') '# K_tot table: rows=(j,l) pairs j=1..N_shells l=0..lmax, cols=k values k=0..N_shells'
-        !     do j = 1, n_shells * (lmax + 1)
-        !         write(debug_unit, '(*(ES12.4, 1X))') K_tot_table(j, :)
-        !     end do
-        !     close(debug_unit)
-        ! end if
-        ! deallocate(K_tot_table)
     end subroutine bin_spectrum
 
-    ! =========================================================================
-    ! OGIVE (CUMULATIVE-SPLINE) SPECTRUM ROUTINES
-    ! =========================================================================
-
-    ! 9. Recursive quicksort on key(:), permuting vals(:) concurrently.
-    recursive subroutine quicksort_paired(key, vals, lo_in, hi_in)
-        real(kind=real64), intent(inout) :: key(:), vals(:)
-        integer, intent(in) :: lo_in, hi_in
-
-        real(kind=real64) :: pivot, tmp
-        integer :: lo, hi, mid
-
-        lo = lo_in
-        hi = hi_in
-        if (lo >= hi) return
-
-        ! Median-of-three pivot selection
-        mid = (lo + hi) / 2
-        if (key(lo) > key(mid)) then
-            tmp = key(lo); key(lo) = key(mid); key(mid) = tmp
-            tmp = vals(lo); vals(lo) = vals(mid); vals(mid) = tmp
-        end if
-        if (key(lo) > key(hi)) then
-            tmp = key(lo); key(lo) = key(hi); key(hi) = tmp
-            tmp = vals(lo); vals(lo) = vals(hi); vals(hi) = tmp
-        end if
-        if (key(mid) > key(hi)) then
-            tmp = key(mid); key(mid) = key(hi); key(hi) = tmp
-            tmp = vals(mid); vals(mid) = vals(hi); vals(hi) = tmp
-        end if
-        pivot = key(mid)
-
-        ! Hoare partition
-        lo = lo_in
-        hi = hi_in
-        do
-            do while (key(lo) < pivot)
-                lo = lo + 1
-            end do
-            do while (key(hi) > pivot)
-                hi = hi - 1
-            end do
-            if (lo >= hi) exit
-            tmp = key(lo); key(lo) = key(hi); key(hi) = tmp
-            tmp = vals(lo); vals(lo) = vals(hi); vals(hi) = tmp
-            lo = lo + 1
-            hi = hi - 1
-        end do
-
-        call quicksort_paired(key, vals, lo_in, hi)
-        call quicksort_paired(key, vals, hi + 1, hi_in)
-    end subroutine quicksort_paired
-
-    ! 9b. Merge duplicate wavenumbers in place after sorting.
-    !     Returns the number of unique modes in n_out.
-    !     Optionally zeros out the remaining elements for safety/debugging.
-    subroutine merge_duplicates(key, vals, n_in, n_out)
-        real(kind=real64), intent(inout) :: key(:), vals(:)
-        integer, intent(in)  :: n_in
-        integer, intent(out) :: n_out
-
-        integer :: i, j
-
-        if (n_in <= 1) then
-            n_out = n_in
-            return
-        end if
-
-        j = 1  ! write pointer
-        do i = 2, n_in
-            if (key(i) == key(j)) then
-                ! Duplicate found: sum energy
-                vals(j) = vals(j) + vals(i)
-            else
-                ! New unique key: advance and copy
-                j = j + 1
-                key(j) = key(i)
-                vals(j) = vals(i)
-            end if
-        end do
-        n_out = j
-
-        ! Zero out the remaining unused elements
-        if (n_out < n_in) then
-            key(n_out+1:n_in) = 0.0_real64
-            vals(n_out+1:n_in) = 0.0_real64
-        end if
-    end subroutine merge_duplicates
-
-    ! 10. Ogive binning for the flattened energy E_flat.
-    !     Sorts, cumulates, fits a smoothing spline, and analytically
-    !     differentiates onto a clean log-spaced target grid.
-    subroutine ogive_binning(E_flat, K_flat, n_modes, K_min, K_max, n_bins, E_K, K_bins)
-        integer,           intent(in)  :: n_modes, n_bins
-        real(kind=real64), intent(inout) :: E_flat(n_modes), K_flat(n_modes)
-        real(kind=real64), intent(in)  :: K_min, K_max
-        real(kind=real64), intent(out) :: E_K(0:n_bins), K_bins(0:n_bins)
-
-        real(kind=real64), allocatable :: Cumul(:)
-        real(kind=real64) :: dK, s_factor
-        integer :: idx, n_unique
-
-        type(fitpack_curve) :: spl
-        integer(FP_FLAG) :: ierr
-
-
-        ! ---- Step 1: Sort by wavenumber (quicksort) ----
-        call quicksort_paired(K_flat, E_flat, 1, n_modes)
-
-        ! ---- Step 1b: Merge duplicate wavenumbers ----
-        call merge_duplicates(K_flat, E_flat, n_modes, n_unique)
-
-        ! ---- Step 2: Cumulative sum ----
-        allocate(Cumul(n_unique))
-        Cumul(1) = E_flat(1)
-        do idx = 2, n_unique
-            Cumul(idx) = Cumul(idx - 1) + E_flat(idx)
-        end do
-
-        write(*,'(A, ES12.5)') "   Ogive: total cumulative energy = ", Cumul(n_unique)
-
-        s_factor = s_factor_mult * n_unique
-        ierr = spl%new_fit(K_flat(1:n_unique), Cumul, smoothing=s_factor)
-        if (.not. FITPACK_SUCCESS(ierr)) then
-            write(error_unit, '(A, I0)') "   Ogive: spline fit error, code = ", ierr
-            write(error_unit, '(A)')     "   Ogive: " // FITPACK_MESSAGE(ierr)
-            E_K = 0.0_real64
-            K_bins = 0.0_real64
-            deallocate(Cumul)
-            return
-        end if
-
-        ! ---- Step 4: Generate clean log-spaced target grid ----
-        ! Use the theoretical K_max so the target grid is identical across all calls
-        dK = exp((log(K_max) - log(K_min)) / real(n_bins - 1, real64))
-        K_bins(0) = 0.0_real64
-        K_bins(1) = K_min
-        do idx = 2, n_bins
-            K_bins(idx) = K_bins(idx - 1) * dK
-        end do
-
-        ! ---- Step 5: Analytical differentiation dI/dK ----
-        E_K = spl%dfdx(K_bins, 1, ierr)
-        if (.not. FITPACK_SUCCESS(ierr)) then
-            write(error_unit, '(A, I0)') "   Ogive: derivative evaluation error, code = ", ierr
-            E_K(0:n_bins) = 0.0_real64
-            deallocate(Cumul)
-            return
-        end if
-
-        ! Zero out any extrapolation beyond the maximum actual data wavenumber
-        where (K_bins > K_flat(n_unique)) E_K = 0.0_real64
-
-        ! Clip tiny negative values that may arise from spline oscillation
-        where (E_K < 0.0_real64) E_K = 0.0_real64
-
-        deallocate(Cumul)
-        call spl%destroy()
-    end subroutine ogive_binning
-
-    ! 11. Ogive spectrum for the 3D volume energy map E_modes.
-    !     Gathers discrete modes, and returns a log-spaced grid.
-    !     mode_flag: 0=all (default), 1=2D modes of 2D flow only,
-    !      2=3D, all the rest.
-    subroutine ogive_spectrum(E_modes, lmax, n_shells, r_min, r_max, &
-                              n_bins, E_K, K_bins, mode_flag)
-        integer,           intent(in)  :: lmax, n_shells, n_bins
-        real(kind=real64), intent(in)  :: E_modes(0:lmax, 0:n_shells, n_shells, 3)
-        real(kind=real64), intent(in)  :: r_min, r_max
-        real(kind=real64), intent(out) :: E_K(0:n_bins), K_bins(0:n_bins)
-        integer, intent(in), optional  :: mode_flag
-
-        real(kind=real64) :: E_modes_cs(0:lmax, 0:n_shells, n_shells)
-        real(kind=real64) :: dr, K_min, K_max, vol_fac
-        real(kind=real64) :: r_j, k_ang, k_rad, K_tot, E_contrib
-        integer :: l, j, k, comp, idx, n_modes, flag
-
-        real(kind=real64), allocatable :: K_flat(:), E_flat(:)
-
-        flag = 0
-        if (present(mode_flag)) flag = mode_flag
-
-        dr = (r_max - r_min) / real(n_shells - 1, real64)
-
-        ! ---- Sum spacial components ----
-        E_modes_cs = 0.0_real64
-        do comp = 1, 3
-            ! mode_flag = 1: 2D flow (only horizontal components vt, vp)
-            if (flag == 1 .and. comp == 2) cycle
-            E_modes_cs = E_modes_cs + E_modes(:,:,:, comp)
-        end do
-
-        ! ---- Count non-zero modes to pre-allocate ----
-        n_modes = 0
-        do j = 1, n_shells
-            do k = 0, n_shells
-                ! mode_flag = 1: 2D flow (only k=0 in horizontal components)
-                if (flag == 1 .and. k /= 0) cycle
-                do l = 0, lmax
-                    ! mode_flag = 2: 3D flow (everything except 2D flow at k=0)
-                    if (flag == 2 .and. k == 0) then
-                        E_contrib = E_modes(l, k, j, 2)
-                    else
-                        E_contrib = E_modes_cs(l, k, j)
-                    end if
-                    if (E_contrib == 0.0_real64) cycle
-                    n_modes = n_modes + 1
-                end do
-            end do
-        end do
-
-        write(*,'(A, I0, A)') "   Ogive: gathered ", n_modes, " non-zero modes"
-
-        if (n_modes == 0) then
-            E_K = 0.0_real64
-            K_bins = 0.0_real64
-            return
-        end if
-
-        ! ---- Gather modes into flat arrays ----
-        allocate(K_flat(n_modes), E_flat(n_modes))
-        vol_fac = 4 * pi/(r_max - r_min)
-        idx = 0
-        do j = 1, n_shells
-            do k = 0, n_shells
-                ! mode_flag = 1: 2D flow (only k=0 in horizontal components)
-                if (flag == 1 .and. k /= 0) cycle
-                do l = 0, lmax
-                    ! mode_flag = 2: 3D flow (everything except 2D flow at k=0)
-                    if (flag == 2 .and. k == 0) then
-                        E_contrib = E_modes(l, k, j, 2)
-                    else
-                        E_contrib = E_modes_cs(l, k, j)
-                    end if
-                    if (E_contrib == 0.0_real64) cycle
-                    r_j = r_min + real(j - 1, real64) * dr
-                    k_ang = sqrt(real(l*(l+1), real64)) / r_j
-                    k_rad = sqrt(real(k*(k+1), real64)) * vol_fac
-                    K_tot = sqrt(k_ang**2 + k_rad**2)
-                    idx = idx + 1
-                    K_flat(idx) = K_tot
-                    E_flat(idx) = E_contrib
-                end do
-            end do
-        end do
-
-        K_min = min(sqrt(2.0_real64)/r_max, 2*pi/(r_max-r_min))
-        K_max = real(lmax*(lmax+1), real64)/r_min**2 &
-              + (sqrt(real(n_shells*(n_shells+1), real64))*vol_fac)**2
-
-        call ogive_binning(E_flat, K_flat, n_modes, K_min, K_max, n_bins, E_K, K_bins)
-
-        deallocate(K_flat, E_flat)
-
-    end subroutine ogive_spectrum
-
-    ! 12. Ogive spectrum for the 2D horizontal spectrum spec.
-    !     Gathers discrete modes, and returns a log-spaced grid.
-    subroutine ogive_horizontal_spectrum(spec, lmax, n_shells, r_min, r_max, &
-                                         n_bins, E_K, K_bins)
-        integer,           intent(in)  :: lmax, n_shells, n_bins
-        real(kind=real64), intent(in)  :: spec(0:lmax, n_shells)
-        real(kind=real64), intent(in)  :: r_min, r_max
-        real(kind=real64), intent(out) :: E_K(0:n_bins), K_bins(0:n_bins)
-
-        real(kind=real64) :: dr, K_min, K_max
-        real(kind=real64) :: r_j, K, E_contrib
-        integer :: l, j, idx, n_modes
-
-        real(kind=real64), allocatable :: K_flat(:), E_flat(:)
-
-        dr = (r_max - r_min) / real(n_shells - 1, real64)
-
-        ! ---- Count non-zero modes to pre-allocate ----
-        n_modes = 0
-        do j = 1, n_shells
-            r_j = r_min + real(j - 1, real64) * dr
-            if (r_j == 0.0_real64) cycle
-            do l = 0, lmax
-                if (spec(l, j) == 0.0_real64) cycle
-                n_modes = n_modes + 1
-            end do
-        end do
-
-        write(*,'(A, I0, A)') "   Horizontal Ogive: gathered ", n_modes, " non-zero modes"
-
-        if (n_modes == 0) then
-            E_K = 0.0_real64
-            K_bins = 0.0_real64
-            return
-        end if
-
-        ! ---- Gather modes into flat arrays ----
-        allocate(K_flat(n_modes), E_flat(n_modes))
-        idx = 0
-        do j = 1, n_shells
-            r_j = r_min + real(j - 1, real64) * dr
-            do l = 0, lmax
-                E_contrib = 2.0_real64 * pi * spec(l, j) * r_j**2 * dr
-                if (E_contrib == 0.0_real64) cycle
-                K = sqrt(real(l*(l+1), real64)) / r_j
-                idx = idx + 1
-                K_flat(idx) = K
-                E_flat(idx) = E_contrib
-            end do
-        end do
-
-        K_min = min(sqrt(2.0_real64)/r_max, 2*pi/(r_max-r_min))
-        K_max = real(lmax*(lmax+1), real64)/r_min**2 &
-              + (2*sqrt(real(n_shells*(n_shells+1), real64))*2*pi/(r_max-r_min))**2
-
-        call ogive_binning(E_flat, K_flat, n_modes, K_min, K_max, n_bins, E_K, K_bins)
-
-        deallocate(K_flat, E_flat)
-
-    end subroutine ogive_horizontal_spectrum
 
 end module sht_processing_mod
 
@@ -827,17 +448,16 @@ program sht_3d_utility
     implicit none
 
     integer :: n1, n2, n3, lmax, n_lat, n_lon
-    integer :: arg_count, i, j, k, io_status
+    integer :: arg_count, i, j, k, io_status, last_slash
     real(kind=real64) :: sim_time, pi, theta, phi, ct, st, cp, sp
 
     character(len=256) :: input_path, coord_type, out_file, r_arg, arg
     integer :: arg_idx
     logical :: r_found
-    integer, parameter :: out_unit = 11, vol_unit = 12
+    integer, parameter :: out_unit = 11, vol_unit = 12, count_unit = 13
 
-    real(kind=real64), allocatable :: v1(:,:,:), v2(:,:,:), v3(:,:,:)
     ! Velocity in spherical coordinates (vt=azimuthal/zonal, vr=radial, vp=polar/meridional)
-    real(kind=real64), allocatable :: vt(:,:,:),vr(:,:,:),  vp(:,:,:)
+    real(kind=real64), allocatable :: vt(:,:,:), vr(:,:,:), vp(:,:,:)
 
     real(kind=real64), allocatable :: grid_t(:,:), grid_r(:,:), grid_p(:,:)
     real(kind=real64), allocatable :: coeffs_t(:,:,:), coeffs_r(:,:,:), coeffs_p(:,:,:)
@@ -848,22 +468,22 @@ program sht_3d_utility
     real(kind=real64), allocatable :: E_modes(:,:,:,:)
     real(kind=real64), allocatable :: E_K(:), E2d_K(:), E3d_K(:), K_bins(:)
     real(kind=real64), allocatable :: E_tot_H(:), E_zonal_H(:), E_rest_H(:)
+    real(kind=real64), allocatable :: count_K(:), count_K_2d(:), count_K_3d(:)
     real(kind=real64) :: rint, rext, dr
     integer :: n_bins
 
     real(kind=real64) :: vx, vy, vz
     real(kind=real64) :: E_phys, d_theta, d_phi, r_j
-    real(kind=real64) :: E_binned_sum!, log_K_min, log_K_max, delta_log, w_hi
+    real(kind=real64) :: E_binned_sum, log_K_min, log_K_max, delta_log, w_hi
 
     ! 1. Parse Command Line
     arg_count = command_argument_count()
     if (arg_count < 2) then
-        write(error_unit, '("Usage: ./sht_3d_utility <file_path> -r=<r_in> [-s=<s_factor>] [-p|-c]")')
+        write(error_unit, '("Usage: ./sht_3d_utility <file_path> -r=<r_in> [-p|-c]")')
         write(error_unit, '(" -r=<r_in>      : inner radius (required); r_ext = r_in + 1")')
-        write(error_unit, '(" -s=<s_factor>  : smoothing factor multiplier (default=0.005)")')
         write(error_unit, '(" -p (default)   = velocity field input is in spherical coordinates")')
         write(error_unit, '(" -c             = velocity field input is in Cartesian coordinates")')
-        write(error_unit, '("Example: ./sht_3d_utility dati/spbou001234.q -r=1.0 -s=0.002 -c")')
+        write(error_unit, '("Example: ./sht_3d_utility dati/spbou001234.q -r=1.0 -c")')
         stop 1
     end if
 
@@ -882,12 +502,6 @@ program sht_3d_utility
                 stop 1
             end if
             r_found = .true.
-        else if (arg(1:3) == '-s=') then
-            read(arg(4:), *, iostat=io_status) s_factor_mult
-            if (io_status /= 0) then
-                write(error_unit, '("Error: could not parse s_factor from: ", A)') trim(arg)
-                stop 1
-            end if
         else if (trim(arg) == '-p' .or. trim(arg) == '-c') then
             coord_type = arg
         else
@@ -902,25 +516,21 @@ program sht_3d_utility
 
     rext = rint + 1.0_real64
     write(*, '(A, F10.4, A, F10.4)') "   Inner radius: ", rint, "   Outer radius: ", rext
-    write(*, '(A, F10.6)') "   Ogive smoothing factor multiplier: ", s_factor_mult
 
     ! 2. Read Data
-    call read_simulation_data(input_path, n1, n2, n3, sim_time, v1, v2, v3)
+    call read_simulation_data(input_path, n1, n2, n3, sim_time, vt, vr, vp)
     write(*, '(A, 3(I0, A), F10.4)') "   Dimensions: ", n1, "x", n2, "x", n3, " at time ", sim_time
 
     ! Compute radial spacing (uniform grid, shell thickness = 1)
     dr = (rext - rint) / real(n2 - 1, real64)
 
     ! 3. Handle Velocity Field Appropriately (Polar vs Cartesian)
-    allocate(vt(n1, n2, n3), vr(n1, n2, n3), vp(n1, n2, n3))
+    pi = 2.0_real64 * asin(1.0_real64)
 
     if (trim(coord_type) == '-p') then
         write(*,*) "-> Using spherical velocity components directly (vt, vr, vp)."
-        vt = v1;   vr = v2;   vp = v3
     else if (trim(coord_type) == '-c') then
         write(*,*) "-> Converting Cartesian velocity components to spherical..."
-        pi = 2.0_real64 * asin(1.0_real64)
-
         do k = 1, n3
             ! Colatitude (polar angle phi) varies along k
             phi = real(k-1, real64) * pi / real(n3-1, real64)
@@ -933,9 +543,9 @@ program sht_3d_utility
                     ct = cos(theta)
                     st = sin(theta)
 
-                    vx = v1(i, j, k)
-                    vy = v2(i, j, k)
-                    vz = v3(i, j, k)
+                    vx = vt(i, j, k)
+                    vy = vr(i, j, k)
+                    vz = vp(i, j, k)
 
                     vt(i, j, k) = -vx*st    + vy*ct
                     vr(i, j, k) =  vx*sp*ct + vy*sp*st + vz*cp
@@ -965,9 +575,6 @@ program sht_3d_utility
         end do
     end do
     write(*,'(A, ES14.7)') "   Total Physical Energy (Grid sum) : ", E_phys
-
-    ! We don't need the original arrays anymore
-    deallocate(v1, v2, v3)
 
     ! 4. Setup SHT Parameters
     n_lat = n3 - mod(n3, 2)
@@ -1024,12 +631,17 @@ program sht_3d_utility
     allocate(E_tot_H(0:n_bins), E_zonal_H(0:n_bins), E_rest_H(0:n_bins), K_bins(0:n_bins))
 
     write(*,*) "-> Computing Horizontal Spectra (ogive)..."
-    call ogive_horizontal_spectrum(spec_tot,  lmax, n2, rint, rext, n_bins, E_tot_H,   K_bins)
-    call ogive_horizontal_spectrum(spec_m0,   lmax, n2, rint, rext, n_bins, E_zonal_H, K_bins)
-    call ogive_horizontal_spectrum(spec_rest, lmax, n2, rint, rext, n_bins, E_rest_H,  K_bins)
+    call bin_horizontal_spectrum(spec_tot,  lmax, n2, rint, rext, n_bins, E_tot_H,   K_bins)
+    call bin_horizontal_spectrum(spec_m0,   lmax, n2, rint, rext, n_bins, E_zonal_H, K_bins)
+    call bin_horizontal_spectrum(spec_rest, lmax, n2, rint, rext, n_bins, E_rest_H,  K_bins)
 
     ! 6. Output the horizontal spectra
-    out_file = 'horizontal_spectrum.dat'
+    last_slash = scan(trim(input_path), '/', back=.true.)
+    if (last_slash > 0) then
+        out_file = input_path(1:last_slash) // 'h_spec.dat'
+    else
+        out_file = 'h_spec.dat'
+    end if
     write(*,*) "-> Saving Horizontal Spectra to: ", trim(out_file)
     open(unit=out_unit, file=trim(out_file), status='replace')
     write(out_unit, '(A)') "# k | E_tot_H(k) | E_zonal_H(k) | E_rest_H(k)"
@@ -1054,31 +666,24 @@ program sht_3d_utility
     deallocate(coeffs_all)
 
     allocate(E_K(0:n_bins), E2d_K(0:n_bins), E3d_K(0:n_bins))
+    allocate(count_K(0:n_bins), count_K_2d(0:n_bins), count_K_3d(0:n_bins))
     write(*,*) "-> Computing Volume Spectra..."
-    call ogive_spectrum(E_modes, lmax, n2, rint, rext, n_bins, E_K, K_bins)
-    call ogive_spectrum(E_modes, lmax, n2, rint, rext, n_bins, E2d_K, K_bins, 1)
-    call ogive_spectrum(E_modes, lmax, n2, rint, rext, n_bins, E3d_K, K_bins, 2)
+    call bin_spectrum(E_modes, lmax, n2, rint, rext, n_bins, E_K,    K_bins,    count_K)
+    call bin_spectrum(E_modes, lmax, n2, rint, rext, n_bins, E2d_K,  K_bins, count_K_2d, 1)
+    call bin_spectrum(E_modes, lmax, n2, rint, rext, n_bins, E3d_K,  K_bins, count_K_3d, 2)
 
-    ! ! Parseval check: integrate binned spectrum as sum(E_K * dK)
-    ! delta_log = log(K_bins(2) / K_bins(1))
-    ! w_hi = exp(0.5_real64 * delta_log) - exp(-0.5_real64 * delta_log)
+    ! Parseval check: integrate binned spectrum as sum(E_K * dK)
+    delta_log = log(K_bins(2) / K_bins(1))
+    w_hi = exp(0.5_real64 * delta_log) - exp(-0.5_real64 * delta_log)
     
-    ! E_binned_sum = E_K(0) ! DC mode doesn't have a width in the log bins
-    ! do i = 1, n_bins
-    !     E_binned_sum = E_binned_sum + E_K(i) * K_bins(i) * w_hi
-    ! end do
-
-    ! Parseval check: integrate E(K) dK via trapezoidal rule on the ogive output
-    
-    E_binned_sum = 0.0_real64
+    E_binned_sum = E_K(0) ! DC mode doesn't have a width in the log bins
     do i = 1, n_bins
-        E_binned_sum = E_binned_sum &
-            + 0.5_real64 * (E_K(i-1) + E_K(i)) * (K_bins(i) - K_bins(i-1))
+        E_binned_sum = E_binned_sum + E_K(i) * K_bins(i) * w_hi
     end do
 
-    write(*,'(A)')          "   --- Final Physical Parseval Check ---"
-    write(*,'(A, ES14.7)')  "       Physical Energy (Grid sum)   : ", E_phys
-    write(*,'(A, ES14.7)')  "       Integral of Binned Spectrum  : ", E_binned_sum
+    write(*,'(A)')          "   --- Energy conservation check (Parseval thm.) ---"
+    write(*,'(A, ES14.7)')  "       Physical energy (grid sum)   : ", E_phys
+    write(*,'(A, ES14.7)')  "       Integral of binned spectrum  : ", E_binned_sum
     if (E_phys > 0.0_real64) then
         write(*,'(A, F8.4, A)') "       Relative difference: ", &
             abs(E_binned_sum - E_phys) / E_phys * 100.0_real64, " %"
@@ -1087,7 +692,11 @@ program sht_3d_utility
     deallocate(E_modes)
 
     ! Write volume spectrum
-    out_file = 'volume_spectrum.dat'
+    if (last_slash > 0) then
+        out_file = input_path(1:last_slash) // 'v_spec.dat'
+    else
+        out_file = 'v_spec.dat'
+    end if
     write(*,*) "-> Saving Volume Spectrum to: ", trim(out_file)
     open(unit=vol_unit, file=trim(out_file), status='replace')
     write(vol_unit, '(A)') "# k | E(K) | E_2d(k) | E_3d(k)"
@@ -1098,7 +707,23 @@ program sht_3d_utility
     end do
     close(vol_unit)
 
-    deallocate(E_K, E2d_K, E3d_K, K_bins)
+    deallocate(E_K, E2d_K, E3d_K)
+
+    ! Write binning count files
+    if (last_slash > 0) then
+        out_file = input_path(1:last_slash) // 'binning.dat'
+    else
+        out_file = 'binning.dat'
+    end if
+    write(*,*) "-> Saving Binning Counts to: ", trim(out_file)
+    open(unit=count_unit, file=trim(out_file), status='replace')
+    write(count_unit, '(A)') "# k | count_tot | count_2d | count_3d"
+    do i = 0, n_bins
+        write(count_unit, '(ES15.7, ES15.7, ES15.7, ES15.7)') K_bins(i), count_K(i), count_K_2d(i), count_K_3d(i)
+    end do
+    close(count_unit)
+
+    deallocate(K_bins, count_K, count_K_2d, count_K_3d)
 
     write(*,*) "-> Done."
 
