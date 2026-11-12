@@ -117,6 +117,7 @@ module binner_mod
         procedure :: accumulate_volume_energy => binner_accumulate_volume_energy
         procedure :: accumulate_horizontal_energy => binner_accumulate_horizontal_energy
         procedure :: normalize => binner_normalize
+        procedure :: compute_flux => binner_compute_flux
         procedure :: destroy => binner_destroy
     end type spectral_binner_t
 
@@ -265,7 +266,7 @@ contains
                 E_rest = 2.0_real64 * pi * spec_rest(l, j) * r_j**2 * self%dr
                 E_tot  = E_m0 + E_rest
 
-                if (E_tot == 0.0_real64) cycle
+                if (E_m0 == 0.0_real64 .and. E_rest == 0.0_real64) cycle
 
                 K_tot = sqrt(real(l * (l + 1), real64)) / r_j
 
@@ -339,6 +340,41 @@ contains
 
     end subroutine binner_normalize
 
+    subroutine binner_compute_flux(self, flux_tot, flux_1, flux_2)
+        class(spectral_binner_t), intent(in) :: self
+        real(kind=real64), intent(out) :: flux_tot(0:self%n_bins)
+        real(kind=real64), intent(out) :: flux_1(0:self%n_bins)
+        real(kind=real64), intent(out) :: flux_2(0:self%n_bins)
+
+        real(kind=real64) :: w_lo, dK, cum_tot, cum_1, cum_2
+        integer :: i
+
+        w_lo = exp(0.5_real64 * self%delta_log) - exp(-0.5_real64 * self%delta_log)
+
+        ! DC mode (i = 0) was not divided by dK in normalize()
+        cum_tot = -self%val_tot(0)
+        cum_1   = -self%val_1(0)
+        cum_2   = -self%val_2(0)
+
+        flux_tot(0) = cum_tot
+        flux_1(0)   = cum_1
+        flux_2(0)   = cum_2
+
+        do i = 1, self%n_bins
+            dK = self%K_bins(i) * w_lo
+            ! Evaluate cumulative flux at bin centre K_bins(i) (midpoint rule),
+            ! matching the wavenumber where T(K_i) is defined.
+            flux_tot(i) = cum_tot - 0.5_real64 * self%val_tot(i) * dK
+            flux_1(i)   = cum_1   - 0.5_real64 * self%val_1(i)   * dK
+            flux_2(i)   = cum_2   - 0.5_real64 * self%val_2(i)   * dK
+
+            ! Advance cumulative sum to the upper edge of bin i
+            cum_tot = cum_tot - self%val_tot(i) * dK
+            cum_1   = cum_1   - self%val_1(i)   * dK
+            cum_2   = cum_2   - self%val_2(i)   * dK
+        end do
+    end subroutine binner_compute_flux
+
     subroutine binner_destroy(self)
         class(spectral_binner_t), intent(inout) :: self
 
@@ -353,6 +389,146 @@ contains
     end subroutine binner_destroy
 
 end module binner_mod
+
+
+module advection_mod
+    use, intrinsic :: iso_fortran_env, only: real64
+    implicit none
+
+    real(kind=real64), parameter, private :: pi = 2.0_real64 * asin(1.0_real64)
+
+contains
+
+    ! Computes one component of the nonlinear advection acceleration vector:
+    !   N = -(u . grad)u in spherical coordinates (r, theta, phi)
+    ! including metric curvature terms.
+    !   comp = 1: N_theta (azimuthal)
+    !   comp = 2: N_r     (radial)
+    !   comp = 3: N_phi   (meridional / polar)
+    subroutine compute_advection_component(vt, vr, vp, n1, n2, n3, rint, dr, comp, N_comp)
+        integer,           intent(in)  :: n1, n2, n3, comp
+        real(kind=real64), intent(in)  :: vt(n1, n2, n3), vr(n1, n2, n3), vp(n1, n2, n3)
+        real(kind=real64), intent(in)  :: rint, dr
+        real(kind=real64), intent(out) :: N_comp(n1, n2, n3)
+
+        real(kind=real64) :: dtheta, dphi, inv_2dtheta, inv_2dphi, inv_2dr
+        real(kind=real64) :: r_j, inv_r, phi_k, sin_phi, cos_phi, cot_phi, inv_r_sin_phi
+        real(kind=real64) :: df_dr, df_dphi, df_dtheta, u_dot_grad_f
+        integer :: i, j, k, i_prev, i_next
+
+        dtheta = 2.0_real64 * pi / real(n1 - 1, real64)
+        dphi   = pi / real(n3 - 1, real64)
+
+        inv_2dtheta = 1.0_real64 / (2.0_real64 * dtheta)
+        inv_2dphi   = 1.0_real64 / (2.0_real64 * dphi)
+        inv_2dr     = 1.0_real64 / (2.0_real64 * dr)
+
+        N_comp = 0.0_real64
+
+        !$OMP PARALLEL DO COLLAPSE(2) PRIVATE(k, j, i, i_prev, i_next, r_j, inv_r, phi_k, &
+        !$OMP& sin_phi, cos_phi, cot_phi, inv_r_sin_phi, df_dr, df_dphi, df_dtheta, u_dot_grad_f) &
+        !$OMP& SCHEDULE(STATIC)
+        do k = 2, n3 - 1
+            do j = 1, n2
+                r_j = rint + real(j - 1, real64) * dr
+                inv_r = 1.0_real64 / r_j
+
+                phi_k = real(k - 1, real64) * dphi
+                sin_phi = sin(phi_k)
+                cos_phi = cos(phi_k)
+                cot_phi = cos_phi / sin_phi
+                inv_r_sin_phi = 1.0_real64 / (r_j * sin_phi)
+
+                do i = 1, n1 - 1
+                    i_prev = merge(n1 - 1, i - 1, i == 1)
+                    i_next = merge(1,      i + 1, i == n1 - 1)
+
+                    select case (comp)
+                    case (1)
+                        ! Component 1: theta / azimuthal (vt)
+                        if (j == 1) then
+                            df_dr = (-3.0_real64 * vt(i, 1, k) + 4.0_real64 * vt(i, 2, k) - vt(i, 3, k)) * inv_2dr
+                        else if (j == n2) then
+                            df_dr = (3.0_real64 * vt(i, n2, k) - 4.0_real64 * vt(i, n2 - 1, k) + vt(i, n2 - 2, k)) * inv_2dr
+                        else
+                            df_dr = (vt(i, j + 1, k) - vt(i, j - 1, k)) * inv_2dr
+                        end if
+                        df_dphi   = (vt(i, j, k + 1) - vt(i, j, k - 1)) * inv_2dphi
+                        df_dtheta = (vt(i_next, j, k) - vt(i_prev, j, k)) * inv_2dtheta
+
+                        u_dot_grad_f = vr(i, j, k) * df_dr + &
+                                       (vp(i, j, k) * inv_r) * df_dphi + &
+                                       (vt(i, j, k) * inv_r_sin_phi) * df_dtheta
+
+                        N_comp(i, j, k) = -( u_dot_grad_f + &
+                                            (vt(i, j, k) * vr(i, j, k) * inv_r) + &
+                                            (vt(i, j, k) * vp(i, j, k) * cot_phi * inv_r) )
+
+                    case (2)
+                        ! Component 2: radial (vr)
+                        if (j == 1) then
+                            df_dr = (-3.0_real64 * vr(i, 1, k) + 4.0_real64 * vr(i, 2, k) - vr(i, 3, k)) * inv_2dr
+                        else if (j == n2) then
+                            df_dr = (3.0_real64 * vr(i, n2, k) - 4.0_real64 * vr(i, n2 - 1, k) + vr(i, n2 - 2, k)) * inv_2dr
+                        else
+                            df_dr = (vr(i, j + 1, k) - vr(i, j - 1, k)) * inv_2dr
+                        end if
+                        df_dphi   = (vr(i, j, k + 1) - vr(i, j, k - 1)) * inv_2dphi
+                        df_dtheta = (vr(i_next, j, k) - vr(i_prev, j, k)) * inv_2dtheta
+
+                        u_dot_grad_f = vr(i, j, k) * df_dr + &
+                                       (vp(i, j, k) * inv_r) * df_dphi + &
+                                       (vt(i, j, k) * inv_r_sin_phi) * df_dtheta
+
+                        N_comp(i, j, k) = -( u_dot_grad_f - &
+                                            (vt(i, j, k)**2 + vp(i, j, k)**2) * inv_r )
+
+                    case (3)
+                        ! Component 3: phi / meridional (vp)
+                        if (j == 1) then
+                            df_dr = (-3.0_real64 * vp(i, 1, k) + 4.0_real64 * vp(i, 2, k) - vp(i, 3, k)) * inv_2dr
+                        else if (j == n2) then
+                            df_dr = (3.0_real64 * vp(i, n2, k) - 4.0_real64 * vp(i, n2 - 1, k) + vp(i, n2 - 2, k)) * inv_2dr
+                        else
+                            df_dr = (vp(i, j + 1, k) - vp(i, j - 1, k)) * inv_2dr
+                        end if
+                        df_dphi   = (vp(i, j, k + 1) - vp(i, j, k - 1)) * inv_2dphi
+                        df_dtheta = (vp(i_next, j, k) - vp(i_prev, j, k)) * inv_2dtheta
+
+                        u_dot_grad_f = vr(i, j, k) * df_dr + &
+                                       (vp(i, j, k) * inv_r) * df_dphi + &
+                                       (vt(i, j, k) * inv_r_sin_phi) * df_dtheta
+
+                        N_comp(i, j, k) = -( u_dot_grad_f + &
+                                            (vp(i, j, k) * vr(i, j, k) * inv_r) - &
+                                            (vt(i, j, k)**2 * cot_phi * inv_r) )
+                    end select
+                end do
+                N_comp(n1, j, k) = N_comp(1, j, k)
+            end do
+        end do
+        !$OMP END PARALLEL DO
+
+        ! Coordinate singularity guard at poles (k = 1, n3):
+        ! A smooth horizontal vector at the pole has theta-dependent components (vt, vp),
+        ! and 1/sin(phi) diverges. Finite placeholders here prevent NaN/Inf
+        ! in SHExpandDH while having zero effect on results because:
+        !   1. the physical volume element dOmega = sin(phi) dtheta dphi vanishes at the poles,
+        !   2. the Driscoll-Healy quadrature weight at k = 1 (phi = 0) is identically zero, and
+        !   3. the south pole row k = n3 lies outside the 1..n_lat transform slice.
+        if (comp == 2) then
+            do j = 1, n2
+                N_comp(:, j, 1)  = N_comp(:, j, 2)
+                N_comp(:, j, n3) = N_comp(:, j, n3 - 1)
+            end do
+        else
+            N_comp(:, :, 1)  = 0.0_real64
+            N_comp(:, :, n3) = 0.0_real64
+        end if
+
+    end subroutine compute_advection_component
+
+end module advection_mod
 
 
 module sht_processing_mod
@@ -429,6 +605,38 @@ contains
         deallocate(spec_m0, spec_rest)
     end subroutine compute_horizontal_spectrum_comp
 
+    ! 4. Computes horizontal scale-to-scale energy transfer for ONE velocity component
+    !    using triangularly packed (l,m) coefficients and Plancherel factor of 2.
+    subroutine compute_horizontal_transfer_comp(coeffs_u, coeffs_N, lmax, n_lm, n_shells, binner)
+        integer,                 intent(in)    :: lmax, n_lm, n_shells
+        real(kind=real64),       intent(in)    :: coeffs_u(2, n_lm, n_shells)
+        real(kind=real64),       intent(in)    :: coeffs_N(2, n_lm, n_shells)
+        type(spectral_binner_t), intent(inout) :: binner
+
+        real(kind=real64), allocatable :: trans_m0(:,:), trans_rest(:,:)
+        integer :: j, l, m, lm_base
+
+        allocate(trans_m0(0:lmax, n_shells), trans_rest(0:lmax, n_shells))
+        trans_m0   = 0.0_real64
+        trans_rest = 0.0_real64
+
+        do j = 1, n_shells
+            do l = 0, lmax
+                lm_base = (l * (l + 1)) / 2 + 1
+                ! Factor of 2.0 accounts for Plancherel theorem inner product (u . N)
+                trans_m0(l, j) = 2.0_real64 * coeffs_u(1, lm_base, j) * coeffs_N(1, lm_base, j)
+                do m = 1, l
+                    trans_rest(l, j) = trans_rest(l, j) + 2.0_real64 * ( &
+                        coeffs_u(1, lm_base + m, j) * coeffs_N(1, lm_base + m, j) + &
+                        coeffs_u(2, lm_base + m, j) * coeffs_N(2, lm_base + m, j) )
+                end do
+            end do
+        end do
+
+        call binner%accumulate_horizontal_energy(trans_m0, trans_rest)
+        deallocate(trans_m0, trans_rest)
+    end subroutine compute_horizontal_transfer_comp
+
     ! =========================================================================
     ! VOLUME SPECTRUM ROUTINES
     ! =========================================================================
@@ -445,16 +653,23 @@ contains
     !                    Represents the depth-independent (radially uniform) mean flow.
     !      - ell == 0.0: Unfiltered scale (k = n_shells, k_max), raw coefficient energy.
     !      - ell > 0.0 : Gaussian low-pass filter with width ell along the radial coordinate.
-    subroutine compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, ell, fse)
+    subroutine compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, ell, fse, &
+                                                coeffs_N_comp, fst)
         integer,           intent(in)  :: lmax, n_lm, n_shells
         real(kind=real64), intent(in)  :: coeffs_comp(2, n_lm, n_shells)
         real(kind=real64), intent(in)  :: ell
         real(kind=real64), intent(out) :: fse(0:lmax, n_shells)
+        real(kind=real64), intent(in),  optional :: coeffs_N_comp(2, n_lm, n_shells)
+        real(kind=real64), intent(out), optional :: fst(0:lmax, n_shells)
 
         real(kind=real64) :: c_filt(0:lmax), s_filt(0:lmax)
-        real(kind=real64) :: sigma, inv_2sig2, norm, e_sum, e_l
+        real(kind=real64) :: cN_filt(0:lmax), sN_filt(0:lmax)
+        real(kind=real64) :: sigma, inv_2sig2, norm, e_sum, e_l, t_sum, t_l
         integer :: j_max, j_lo, j_hi, i, j, k_sh, l, m, lm_base
         real(kind=real64), allocatable :: w(:)
+        logical :: calc_flux_local
+
+        calc_flux_local = present(coeffs_N_comp) .and. present(fst)
 
         if (ell < 0.0_real64) then
             ! Case 1: k = 0 infinite filter scale (radial average over all shells).
@@ -476,6 +691,24 @@ contains
                               + (s_filt(m) / real(n_shells, real64))**2
                 end do
                 fse(l, 1:n_shells) = e_l
+
+                if (calc_flux_local) then
+                    cN_filt(0:l) = 0.0_real64
+                    sN_filt(0:l) = 0.0_real64
+                    do j = 1, n_shells
+                        do m = 0, l
+                            cN_filt(m) = cN_filt(m) + coeffs_N_comp(1, lm_base + m, j)
+                            sN_filt(m) = sN_filt(m) + coeffs_N_comp(2, lm_base + m, j)
+                        end do
+                    end do
+                    t_l = 0.0_real64
+                    do m = 0, l
+                        t_l = t_l + 2.0_real64 * ( &
+                            (c_filt(m) / real(n_shells, real64)) * (cN_filt(m) / real(n_shells, real64)) + &
+                            (s_filt(m) / real(n_shells, real64)) * (sN_filt(m) / real(n_shells, real64)) )
+                    end do
+                    fst(l, 1:n_shells) = t_l
+                end if
             end do
 
         else if (abs(ell) <= 1.0e-8_real64) then
@@ -490,6 +723,16 @@ contains
                                       + coeffs_comp(2, lm_base + m, j)**2
                     end do
                     fse(l, j) = e_sum
+
+                    if (calc_flux_local) then
+                        t_sum = 0.0_real64
+                        do m = 0, l
+                            t_sum = t_sum + 2.0_real64 * ( &
+                                coeffs_comp(1, lm_base + m, j) * coeffs_N_comp(1, lm_base + m, j) + &
+                                coeffs_comp(2, lm_base + m, j) * coeffs_N_comp(2, lm_base + m, j) )
+                        end do
+                        fst(l, j) = t_sum
+                    end if
                 end do
             end do
 
@@ -511,8 +754,9 @@ contains
             ! Innermost loop runs over contiguous m = 0..l (packed index lm_base + m) for cache
             ! locality and SIMD vectorization; the outer j loop strides across shells.
             ! Boundaries are handled by truncating the kernel to [j_lo, j_hi] and renormalizing by norm.
-            !$OMP PARALLEL DO PRIVATE(i, j_lo, j_hi, norm, l, lm_base, c_filt, s_filt, j, k_sh, m, e_sum) &
-            !$OMP SCHEDULE(STATIC)
+            !$OMP PARALLEL DO PRIVATE(i, j_lo, j_hi, norm, l, lm_base, c_filt, s_filt, &
+            !$OMP& cN_filt, sN_filt, j, k_sh, m, e_sum, t_sum) &
+            !$OMP& SCHEDULE(STATIC)
             do i = 1, n_shells
                 ! Clamp kernel window to stay within valid shell range [1, n_shells]
                 j_lo = max(0, j_max - (i - 1))
@@ -539,6 +783,25 @@ contains
                         e_sum = e_sum + (c_filt(m) / norm)**2 + (s_filt(m) / norm)**2
                     end do
                     fse(l, i) = e_sum
+
+                    if (calc_flux_local) then
+                        cN_filt(0:l) = 0.0_real64
+                        sN_filt(0:l) = 0.0_real64
+                        do j = j_lo, j_hi
+                            k_sh = i + (j - j_max)
+                            do m = 0, l
+                                cN_filt(m) = cN_filt(m) + w(j) * coeffs_N_comp(1, lm_base + m, k_sh)
+                                sN_filt(m) = sN_filt(m) + w(j) * coeffs_N_comp(2, lm_base + m, k_sh)
+                            end do
+                        end do
+                        t_sum = 0.0_real64
+                        do m = 0, l
+                            t_sum = t_sum + 2.0_real64 * ( &
+                                (c_filt(m) / norm) * (cN_filt(m) / norm) + &
+                                (s_filt(m) / norm) * (sN_filt(m) / norm) )
+                        end do
+                        fst(l, i) = t_sum
+                    end if
                 end do
             end do
             !$OMP END PARALLEL DO
@@ -547,52 +810,77 @@ contains
         end if
     end subroutine compute_filtered_spectral_energy
 
-    ! 5. Computes the 3D volume spectrum for ONE velocity component by sweeping
-    !    radial Gaussian filter scales (MSCG coarse-graining), accumulating on the fly into binner.
-    !
-    !    Rationale:
-    !      A field filtered at radial scale ell has cumulative energy of all scales < ell.
-    !      Pair-wise differences (fse - hse) between consecutive filter scales isolate the
-    !      spectral energy in radial wavenumber band k.
-    subroutine compute_volume_spectrum_comp(coeffs_comp, lmax, n_lm, n_shells, comp, binner)
+    ! 6. Computes the 3D volume spectrum for ONE velocity component by sweeping
+    !    radial Gaussian filter scales (MSCG coarse-graining), accumulating on the fly into binner,
+    !    and optionally accumulates scale-to-scale energy transfers into binner_TV.
+    subroutine compute_volume_spectrum_comp(coeffs_comp, lmax, n_lm, n_shells, comp, binner, &
+                                            coeffs_N_comp, binner_TV)
         integer,                 intent(in)    :: lmax, n_lm, n_shells, comp
         real(kind=real64),       intent(in)    :: coeffs_comp(2, n_lm, n_shells)
         type(spectral_binner_t), intent(inout) :: binner
+        real(kind=real64),       intent(in),    optional :: coeffs_N_comp(2, n_lm, n_shells)
+        type(spectral_binner_t), intent(inout), optional :: binner_TV
 
         ! Filter Scale Energy (fse) and Higher Scale Energy (hse)
         real(kind=real64), allocatable :: fse(:,:), hse(:,:)
+        real(kind=real64), allocatable :: fst(:,:), hst(:,:)
         real(kind=real64) :: ell
         integer :: k
+        logical :: calc_flux_local
+
+        calc_flux_local = present(coeffs_N_comp) .and. present(binner_TV)
 
         allocate(hse(0:lmax, n_shells), fse(0:lmax, n_shells))
+        if (calc_flux_local) then
+            allocate(hst(0:lmax, n_shells), fst(0:lmax, n_shells))
+        end if
 
         ! k = 0 means infinite filtering scale, i.e. simple radial averaging across all shells
-        call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, -1.0_real64, fse)
-
-        ! Accumulate energy contribution on the fly (k = 0)
-        call binner%accumulate_volume_energy(fse, 0, comp)
-
-        ! Set hse: first iteration (k = 1) differentiates against k = 0 state
-        hse = fse
+        if (calc_flux_local) then
+            call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, -1.0_real64, fse, &
+                                                  coeffs_N_comp, fst)
+            call binner%accumulate_volume_energy(fse, 0, comp)
+            call binner_TV%accumulate_volume_energy(fst, 0, comp)
+            hse = fse
+            hst = fst
+        else
+            call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, -1.0_real64, fse)
+            call binner%accumulate_volume_energy(fse, 0, comp)
+            hse = fse
+        end if
 
         ! ---- Sweep over radial filter scales ----
-        ! Field filtered at scale ell has cumulative energy of all scales < ell.
-        ! Pair-wise differences represents energy between the 2 filtering scales.
         do k = 1, n_shells - 1
-            ! ell = N/2 / sqrt(k(k+1)) : geometric average between N/2k and N/2(k+1)
             ell = 0.5_real64 * real(n_shells, real64) / sqrt(real(k*(k+1), real64))
 
-            call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, ell, fse)
-            call binner%accumulate_volume_energy(fse - hse, k, comp)
-            hse = fse
+            if (calc_flux_local) then
+                call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, ell, fse, &
+                                                      coeffs_N_comp, fst)
+                call binner%accumulate_volume_energy(fse - hse, k, comp)
+                call binner_TV%accumulate_volume_energy(fst - hst, k, comp)
+                hse = fse
+                hst = fst
+            else
+                call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, ell, fse)
+                call binner%accumulate_volume_energy(fse - hse, k, comp)
+                hse = fse
+            end if
 
-            if ((mod(k, n_shells/4) == 0).and.(n_shells > 64)) write(*,'(A,I4,A,I4,A,I2)') &
+            if ((mod(k, n_shells/4) == 0) .and. (n_shells > 64)) write(*,'(A,I4,A,I4,A,I2)') &
                 "      k = ", k, " * 2*pi/(", n_shells, "dr),   component ", comp
         end do   ! k
 
         ! Unfiltered spectral energy (k_max => ell = 0)
-        call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, 0.0_real64, fse)
-        call binner%accumulate_volume_energy(fse - hse, n_shells, comp)
+        if (calc_flux_local) then
+            call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, 0.0_real64, fse, &
+                                                  coeffs_N_comp, fst)
+            call binner%accumulate_volume_energy(fse - hse, n_shells, comp)
+            call binner_TV%accumulate_volume_energy(fst - hst, n_shells, comp)
+            deallocate(hst, fst)
+        else
+            call compute_filtered_spectral_energy(coeffs_comp, lmax, n_lm, n_shells, 0.0_real64, fse)
+            call binner%accumulate_volume_energy(fse - hse, n_shells, comp)
+        end if
 
         deallocate(hse, fse)
     end subroutine compute_volume_spectrum_comp
@@ -605,6 +893,7 @@ program sht_3d_utility
     use, intrinsic :: iso_fortran_env, only: real64, error_unit
     use data_io_mod
     use binner_mod, only: spectral_binner_t
+    use advection_mod, only: compute_advection_component
     use sht_processing_mod
     implicit none
 
@@ -614,8 +903,8 @@ program sht_3d_utility
 
     character(len=256) :: input_path, coord_type, out_file, r_arg, arg
     integer :: arg_idx
-    logical :: r_found
-    integer, parameter :: out_unit = 11, vol_unit = 12, count_unit = 13
+    logical :: r_found, calc_flux
+    integer, parameter :: out_unit = 11, vol_unit = 12, count_unit = 13, flux_unit = 14
 
     ! Velocity in spherical coordinates (vt=azimuthal/zonal, vr=radial, vp=polar/meridional)
     real(kind=real64), allocatable :: vt(:,:,:), vr(:,:,:), vp(:,:,:)
@@ -629,17 +918,36 @@ program sht_3d_utility
     real(kind=real64) :: rint, rext, dr
     integer :: n_bins, comp
 
+    ! Nonlinear advection and flux variables
+    real(kind=real64), allocatable :: N_comp(:,:,:), coeffs_N_comp(:,:,:)
+    real(kind=real64), allocatable :: Pi_tot(:), Pi_1(:), Pi_2(:)
+    type(spectral_binner_t) :: binner_TH, binner_TV
+    real(kind=real64) :: T_phys, T_binned_sum, Pi_max
+
     real(kind=real64) :: E_phys, d_theta, d_phi, r_j
     real(kind=real64) :: E_binned_sum, delta_log, w_hi
 
     ! 1. Parse Command Line
     arg_count = command_argument_count()
+    if (arg_count >= 1) then
+        call get_command_argument(1, input_path)
+        if (trim(input_path) == '--help' .or. trim(input_path) == '-h') then
+            write(*, '("Usage: ./sht_3d_utility <file_path> -r=<r_in> [-p|-c] [-f|--flux]")')
+            write(*, '(" -r=<r_in>      : inner radius (required); r_ext = r_in + 1")')
+            write(*, '(" -p (default)   = velocity field input is in spherical coordinates")')
+            write(*, '(" -c             = velocity field input is in Cartesian coordinates")')
+            write(*, '(" -f, --flux     = also compute horizontal and 3D volume energy fluxes")')
+            stop 0
+        end if
+    end if
+
     if (arg_count < 2) then
-        write(error_unit, '("Usage: ./sht_3d_utility <file_path> -r=<r_in> [-p|-c]")')
+        write(error_unit, '("Usage: ./sht_3d_utility <file_path> -r=<r_in> [-p|-c] [-f|--flux]")')
         write(error_unit, '(" -r=<r_in>      : inner radius (required); r_ext = r_in + 1")')
         write(error_unit, '(" -p (default)   = velocity field input is in spherical coordinates")')
         write(error_unit, '(" -c             = velocity field input is in Cartesian coordinates")')
-        write(error_unit, '("Example: ./sht_3d_utility dati/spbou001234.q -r=1.0 -c")')
+        write(error_unit, '(" -f, --flux     = also compute horizontal and 3D volume energy fluxes")')
+        write(error_unit, '("Example: ./sht_3d_utility dati/spbou001234.q -r=1.0 -c -f")')
         stop 1
     end if
 
@@ -647,6 +955,7 @@ program sht_3d_utility
 
     ! Default values
     coord_type = '-p'
+    calc_flux = .false.
     r_found = .false.
 
     do arg_idx = 2, arg_count
@@ -660,6 +969,8 @@ program sht_3d_utility
             r_found = .true.
         else if (trim(arg) == '-p' .or. trim(arg) == '-c') then
             coord_type = arg
+        else if (trim(arg) == '-f' .or. trim(arg) == '--flux') then
+            calc_flux = .true.
         else
             write(error_unit, '("Warning: unknown argument skipped: ", A)') trim(arg)
         end if
@@ -715,9 +1026,40 @@ program sht_3d_utility
     call binner_H%init(lmax, n2, rint, rext, n_bins)
     call binner_E%init(lmax, n2, rint, rext, n_bins)
 
+    if (calc_flux) then
+        allocate(N_comp(n1, n2, n3))
+        allocate(coeffs_N_comp(2, n_lm, n2))
+        allocate(Pi_tot(0:n_bins), Pi_1(0:n_bins), Pi_2(0:n_bins))
+        call binner_TH%init(lmax, n2, rint, rext, n_bins)
+        call binner_TV%init(lmax, n2, rint, rext, n_bins)
+        T_phys = 0.0_real64
+    end if
+
     ! Stream velocity components one by one through SHT and spectral binning
     do comp = 1, 3
         write(*, '(A, I1, A)') "-> Processing velocity component ", comp, "/3 (SHT + MSCG)..."
+
+        if (calc_flux) then
+            call compute_advection_component(vt, vr, vp, n1, n2, n3, rint, dr, comp, N_comp)
+            do k = 1, n3
+                phi = real(k-1, real64) * pi / real(n3-1, real64)
+                sp = sin(phi)
+                do j = 1, n2
+                    r_j = rint + real(j-1, real64) * dr
+                    do i = 1, n1-1
+                        select case (comp)
+                        case (1)
+                            T_phys = T_phys + vt(i,j,k) * N_comp(i,j,k) * r_j**2 * dr * d_theta * d_phi * sp
+                        case (2)
+                            T_phys = T_phys + vr(i,j,k) * N_comp(i,j,k) * r_j**2 * dr * d_theta * d_phi * sp
+                        case (3)
+                            T_phys = T_phys + vp(i,j,k) * N_comp(i,j,k) * r_j**2 * dr * d_theta * d_phi * sp
+                        end select
+                    end do
+                end do
+            end do
+        end if
+
         do j = 1, n2
             ! Extract 2D spherical slices, transpose to (lat, lon) format for SHTOOLS
             select case (comp)
@@ -732,18 +1074,36 @@ program sht_3d_utility
             call get_sht_coeffs(grid_2d, n_lat, lmax, coeffs_shell)
             call pack_sht_coeffs(coeffs_shell, lmax, n_lm, coeffs_comp(:, :, j))
 
+            if (calc_flux) then
+                grid_2d(:, :) = transpose(N_comp(1:n_lon, j, 1:n_lat))
+                call get_sht_coeffs(grid_2d, n_lat, lmax, coeffs_shell)
+                call pack_sht_coeffs(coeffs_shell, lmax, n_lm, coeffs_N_comp(:, :, j))
+            end if
+
             if (mod(j, 25) == 0) write(*,*) "      Progress: shell ", j, "/", n2
         end do
 
         write(*,*) "   -> Computing Horizontal Spectra contribution..."
         call compute_horizontal_spectrum_comp(coeffs_comp, lmax, n_lm, n2, binner_H)
+        if (calc_flux) then
+            write(*,*) "   -> Computing Horizontal Transfer contribution..."
+            call compute_horizontal_transfer_comp(coeffs_comp, coeffs_N_comp, lmax, n_lm, n2, binner_TH)
+        end if
 
         write(*,*) "   -> Computing 3D Volume Spectrum contribution..."
-        call compute_volume_spectrum_comp(coeffs_comp, lmax, n_lm, n2, comp, binner_E)
+        if (calc_flux) then
+            call compute_volume_spectrum_comp(coeffs_comp, lmax, n_lm, n2, comp, binner_E, &
+                                              coeffs_N_comp, binner_TV)
+        else
+            call compute_volume_spectrum_comp(coeffs_comp, lmax, n_lm, n2, comp, binner_E)
+        end if
     end do
 
     deallocate(vt, vr, vp)
     deallocate(grid_2d, coeffs_shell, coeffs_comp)
+    if (calc_flux) then
+        deallocate(N_comp, coeffs_N_comp)
+    end if
 
     ! 4. Output Horizontal Spectra
     call binner_H%normalize()
@@ -764,6 +1124,30 @@ program sht_3d_utility
         end if
     end do
     close(out_unit)
+
+    ! Output Horizontal Flux Spectra if requested
+    if (calc_flux) then
+        call binner_TH%normalize()
+        call binner_TH%compute_flux(Pi_tot, Pi_1, Pi_2)
+
+        if (last_slash > 0) then
+            out_file = input_path(1:last_slash) // 'h_flux.dat'
+        else
+            out_file = 'h_flux.dat'
+        end if
+        write(*,*) "-> Saving Horizontal Flux Spectra to: ", trim(out_file)
+        open(unit=flux_unit, file=trim(out_file), status='replace')
+        write(flux_unit, '(A)') "# k | Pi_tot_H(k) | Pi_zonal_H(k) | Pi_rest_H(k) | T_tot_H(k) | T_zonal_H(k) | T_rest_H(k)"
+        do i = 0, n_bins
+            if (binner_TH%count_tot(i) > 0.0_real64) then
+                write(flux_unit, '(7(ES15.7))') &
+                    binner_TH%K_bins(i), Pi_tot(i), Pi_1(i), Pi_2(i), &
+                    binner_TH%val_tot(i), binner_TH%val_1(i), binner_TH%val_2(i)
+            end if
+        end do
+        close(flux_unit)
+        call binner_TH%destroy()
+    end if
 
     call binner_H%destroy()
 
@@ -818,6 +1202,45 @@ program sht_3d_utility
             binner_E%K_bins(i), binner_E%count_tot(i), binner_E%count_1(i), binner_E%count_2(i)
     end do
     close(count_unit)
+
+    ! Output Volume Flux Spectra if requested
+    if (calc_flux) then
+        call binner_TV%normalize()
+        call binner_TV%compute_flux(Pi_tot, Pi_1, Pi_2)
+
+        T_binned_sum = -(Pi_tot(n_bins) - 0.5_real64 * binner_TV%val_tot(n_bins) * binner_TV%K_bins(n_bins) * w_hi)
+        Pi_max = maxval(abs(Pi_tot))
+
+        write(*,'(A)')          "   --- Nonlinear transfer conservation check ---"
+        write(*,'(A, ES14.7)')  "       Physical transfer (grid sum) : ", T_phys
+        write(*,'(A, ES14.7)')  "       Integral of binned transfer  : ", T_binned_sum
+        write(*,'(A, ES14.7)')  "       Peak energy flux max|Pi(K)|  : ", Pi_max
+        if (Pi_max > 0.0_real64) then
+            write(*,'(A, F8.4, A)') "       Flux closure |Pi_end|/max|Pi|: ", &
+                abs(T_binned_sum) / Pi_max * 100.0_real64, " %"
+            write(*,'(A, F8.4, A)') "       Grid-spectral diff / max|Pi| : ", &
+                abs(T_binned_sum - T_phys) / Pi_max * 100.0_real64, " %"
+        end if
+
+        if (last_slash > 0) then
+            out_file = input_path(1:last_slash) // 'v_flux.dat'
+        else
+            out_file = 'v_flux.dat'
+        end if
+        write(*,*) "-> Saving Volume Flux Spectra to: ", trim(out_file)
+        open(unit=flux_unit, file=trim(out_file), status='replace')
+        write(flux_unit, '(A)') "# k | Pi(K) | Pi_2d(K) | Pi_3d(K) | T(K) | T_2d(K) | T_3d(K)"
+        do i = 0, n_bins
+            if (binner_TV%count_tot(i) > 0.0_real64) then
+                write(flux_unit, '(7(ES15.7))') &
+                    binner_TV%K_bins(i), Pi_tot(i), Pi_1(i), Pi_2(i), &
+                    binner_TV%val_tot(i), binner_TV%val_1(i), binner_TV%val_2(i)
+            end if
+        end do
+        close(flux_unit)
+        call binner_TV%destroy()
+        deallocate(Pi_tot, Pi_1, Pi_2)
+    end if
 
     call binner_E%destroy()
 
