@@ -624,6 +624,82 @@ contains
 
     end subroutine compute_sht_coeffs
 
+    ! Recombines the scalar SHT coefficients ct = SHT(f_theta / sin(phi)) and
+    ! cp = SHT(f_phi / sin(phi)) into packed Toroidal (comp = 1) and Spheroidal (comp = 3)
+    ! Vector Spherical Harmonic (VSH) coefficients for 1 <= l <= lmax - 1.
+    subroutine combine_vsh_coeffs(ct, cp, lmax, n_lm, coeffs_tor, coeffs_sph)
+        integer,           intent(in)  :: lmax, n_lm
+        real(kind=real64), intent(in)  :: ct(2, 0:lmax, 0:lmax), cp(2, 0:lmax, 0:lmax)
+        real(kind=real64), intent(out) :: coeffs_tor(2, n_lm), coeffs_sph(2, n_lm)
+
+        real(kind=real64) :: nl, a_up, a_dn, dt(2), dp(2)
+        integer :: l, m, lm
+
+        coeffs_tor = 0.0_real64
+        coeffs_sph = 0.0_real64
+
+        do l = 1, lmax - 1
+            nl = 1.0_real64 / sqrt(real(l * (l + 1), real64))
+            do m = 0, l
+                a_up = l       * c_lm(l + 1, m)
+                a_dn = (l + 1) * c_lm(l,     m)
+                dt = a_up * ct(:, l + 1, m) - a_dn * ct(:, l - 1, m)
+                dp = a_up * cp(:, l + 1, m) - a_dn * cp(:, l - 1, m)
+
+                lm = (l * (l + 1)) / 2 + m + 1
+                coeffs_sph(1, lm) = nl * (dp(1) - m * ct(2, l, m))
+                coeffs_sph(2, lm) = nl * (dp(2) + m * ct(1, l, m))
+                coeffs_tor(1, lm) = nl * (dt(1) + m * cp(2, l, m))
+                coeffs_tor(2, lm) = nl * (dt(2) - m * cp(1, l, m))
+            end do
+        end do
+
+    contains
+
+        pure real(kind=real64) function c_lm(ll, mm)
+            integer, intent(in) :: ll, mm
+            c_lm = sqrt(real((ll - mm) * (ll + mm), real64) / real((2*ll - 1) * (2*ll + 1), real64))
+        end function c_lm
+
+    end subroutine combine_vsh_coeffs
+
+    ! Wrapper for the horizontal Vector SHT on a single spherical shell:
+    ! scales (ft_slice, fp_slice) by 1/sin(phi), performs two scalar SHTs via SHExpandDH,
+    ! and recombines them into packed Toroidal and Spheroidal VSH coefficients.
+    subroutine compute_vsh_coeffs(ft_slice, fp_slice, n_lat, n_lon, lmax, n_lm, &
+                                  coeffs_tor, coeffs_sph)
+        integer,           intent(in)  :: n_lat, n_lon, lmax, n_lm
+        real(kind=real64), intent(in)  :: ft_slice(:,:), fp_slice(:,:)
+        real(kind=real64), intent(out) :: coeffs_tor(2, n_lm), coeffs_sph(2, n_lm)
+
+        real(kind=real64), allocatable :: grid_t(:,:), grid_p(:,:)
+        real(kind=real64), allocatable :: ct(:,:,:), cp(:,:,:)
+        real(kind=real64) :: inv_sp
+        integer :: k
+
+        allocate(grid_t(n_lat, n_lon), grid_p(n_lat, n_lon))
+        allocate(ct(2, 0:lmax, 0:lmax), cp(2, 0:lmax, 0:lmax))
+
+        grid_t(:, :) = transpose(ft_slice(1:n_lon, 1:n_lat))
+        grid_p(:, :) = transpose(fp_slice(1:n_lon, 1:n_lat))
+
+        ! North pole (k = 1, phi = 0): Driscoll-Healy quadrature weight is identically zero
+        grid_t(1, :) = 0.0_real64
+        grid_p(1, :) = 0.0_real64
+        do k = 2, n_lat
+            inv_sp = 1.0_real64 / sin((k - 1) * pi / n_lat)
+            grid_t(k, :) = grid_t(k, :) * inv_sp
+            grid_p(k, :) = grid_p(k, :) * inv_sp
+        end do
+
+        call get_sht_coeffs(grid_t, n_lat, lmax, ct)
+        call get_sht_coeffs(grid_p, n_lat, lmax, cp)
+        call combine_vsh_coeffs(ct, cp, lmax, n_lm, coeffs_tor, coeffs_sph)
+
+        deallocate(grid_t, grid_p, ct, cp)
+
+    end subroutine compute_vsh_coeffs
+
     ! 3. Computes the horizontal spectra and energy transfer for ONE velocity component 
     !    across all shells, accumulating on the fly into binner using 
     !    triangularly packed (l, m) coefficients.
@@ -1082,8 +1158,8 @@ program sht_3d_utility
     call process_component_spectra(coeffs_r, lmax, n_lm, n2, 2, &
                                    binner_H, binner_E, coeffs_Nr, binner_TH, binner_TV)
 
-    ! ===== Stage 2: Tangential components (comp = 1 and comp = 3) =====
-    write(*, '(A)') "-> Stage 2: Processing tangential components (1/3 and 3/3, SHT)..."
+    ! ===== Stage 2: Tangential components (VSH: comp = 1 toroidal, comp = 3 spheroidal) =====
+    write(*, '(A)') "-> Stage 2: Processing tangential components (VSH + MSGC)..."
     allocate(coeffs_tor(2, n_lm, n2), coeffs_sph(2, n_lm, n2))
     if (calc_flux) then
         allocate(Nt_shell(n1, n3), Np_shell(n1, n3))
@@ -1091,10 +1167,8 @@ program sht_3d_utility
     end if
 
     do j = 1, n2
-        call compute_sht_coeffs(vt(1:n_lon, j, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
-                                coeffs_tor(:, :, j))
-        call compute_sht_coeffs(vp(1:n_lon, j, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
-                                coeffs_sph(:, :, j))
+        call compute_vsh_coeffs(vt(1:n_lon, j, 1:n_lat), vp(1:n_lon, j, 1:n_lat), &
+                                n_lat, n_lon, lmax, n_lm, coeffs_tor(:, :, j), coeffs_sph(:, :, j))
 
         if (calc_flux) then
             r_j = rint + real(j - 1, real64) * dr
@@ -1102,10 +1176,8 @@ program sht_3d_utility
             call compute_advection_shell(vt, vr, vp, n1, n2, n3, rint, dr, j, 3, Np_shell)
             T_phys = T_phys + shell_transfer(vt(:, j, :), Nt_shell, n1, n3, r_j, dr, d_theta, d_phi) &
                             + shell_transfer(vp(:, j, :), Np_shell, n1, n3, r_j, dr, d_theta, d_phi)
-            call compute_sht_coeffs(Nt_shell(1:n_lon, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
-                                    coeffs_Ntor(:, :, j))
-            call compute_sht_coeffs(Np_shell(1:n_lon, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
-                                    coeffs_Nsph(:, :, j))
+            call compute_vsh_coeffs(Nt_shell(1:n_lon, 1:n_lat), Np_shell(1:n_lon, 1:n_lat), &
+                                    n_lat, n_lon, lmax, n_lm, coeffs_Ntor(:, :, j), coeffs_Nsph(:, :, j))
         end if
 
         if (mod(j, 25) == 0) write(*,*) "      Progress: shell ", j, "/", n2
