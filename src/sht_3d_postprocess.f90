@@ -399,22 +399,23 @@ module advection_mod
 
 contains
 
-    ! Computes one component of the nonlinear advection acceleration vector:
+    ! Computes one component of the nonlinear advection acceleration vector on a single
+    ! radial shell j:
     !   N = -(u . grad)u in spherical coordinates (r, theta, phi)
     ! including metric curvature terms.
     !   comp = 1: N_theta (azimuthal)
     !   comp = 2: N_r     (radial)
     !   comp = 3: N_phi   (meridional / polar)
-    subroutine compute_advection_component(vt, vr, vp, n1, n2, n3, rint, dr, comp, N_comp)
-        integer,           intent(in)  :: n1, n2, n3, comp
+    subroutine compute_advection_shell(vt, vr, vp, n1, n2, n3, rint, dr, j, comp, N_shell)
+        integer,           intent(in)  :: n1, n2, n3, j, comp
         real(kind=real64), intent(in)  :: vt(n1, n2, n3), vr(n1, n2, n3), vp(n1, n2, n3)
         real(kind=real64), intent(in)  :: rint, dr
-        real(kind=real64), intent(out) :: N_comp(n1, n2, n3)
+        real(kind=real64), intent(out) :: N_shell(:,:)
 
         real(kind=real64) :: dtheta, dphi, inv_2dtheta, inv_2dphi, inv_2dr
         real(kind=real64) :: r_j, inv_r, phi_k, sin_phi, cos_phi, cot_phi, inv_r_sin_phi
         real(kind=real64) :: df_dr, df_dphi, df_dtheta, u_dot_grad_f
-        integer :: i, j, k, i_prev, i_next
+        integer :: i, k, i_prev, i_next
 
         dtheta = 2.0_real64 * pi / real(n1 - 1, real64)
         dphi   = pi / real(n3 - 1, real64)
@@ -423,89 +424,86 @@ contains
         inv_2dphi   = 1.0_real64 / (2.0_real64 * dphi)
         inv_2dr     = 1.0_real64 / (2.0_real64 * dr)
 
-        N_comp = 0.0_real64
+        r_j   = rint + real(j - 1, real64) * dr
+        inv_r = 1.0_real64 / r_j
 
-        !$OMP PARALLEL DO COLLAPSE(2) PRIVATE(k, j, i, i_prev, i_next, r_j, inv_r, phi_k, &
-        !$OMP& sin_phi, cos_phi, cot_phi, inv_r_sin_phi, df_dr, df_dphi, df_dtheta, u_dot_grad_f) &
-        !$OMP& SCHEDULE(STATIC)
+        N_shell = 0.0_real64
+
+        !$OMP PARALLEL DO PRIVATE(k, i, i_prev, i_next, phi_k, sin_phi, cos_phi, cot_phi, &
+        !$OMP& inv_r_sin_phi, df_dr, df_dphi, df_dtheta, u_dot_grad_f) SCHEDULE(STATIC)
         do k = 2, n3 - 1
-            do j = 1, n2
-                r_j = rint + real(j - 1, real64) * dr
-                inv_r = 1.0_real64 / r_j
+            phi_k = real(k - 1, real64) * dphi
+            sin_phi = sin(phi_k)
+            cos_phi = cos(phi_k)
+            cot_phi = cos_phi / sin_phi
+            inv_r_sin_phi = 1.0_real64 / (r_j * sin_phi)
 
-                phi_k = real(k - 1, real64) * dphi
-                sin_phi = sin(phi_k)
-                cos_phi = cos(phi_k)
-                cot_phi = cos_phi / sin_phi
-                inv_r_sin_phi = 1.0_real64 / (r_j * sin_phi)
+            do i = 1, n1 - 1
+                i_prev = merge(n1 - 1, i - 1, i == 1)
+                i_next = merge(1,      i + 1, i == n1 - 1)
 
-                do i = 1, n1 - 1
-                    i_prev = merge(n1 - 1, i - 1, i == 1)
-                    i_next = merge(1,      i + 1, i == n1 - 1)
+                select case (comp)
+                case (1)
+                    ! Component 1: theta / azimuthal (vt)
+                    if (j == 1) then
+                        df_dr = (-3.0_real64 * vt(i, 1, k) + 4.0_real64 * vt(i, 2, k) - vt(i, 3, k)) * inv_2dr
+                    else if (j == n2) then
+                        df_dr = (3.0_real64 * vt(i, n2, k) - 4.0_real64 * vt(i, n2 - 1, k) + vt(i, n2 - 2, k)) * inv_2dr
+                    else
+                        df_dr = (vt(i, j + 1, k) - vt(i, j - 1, k)) * inv_2dr
+                    end if
+                    df_dphi   = (vt(i, j, k + 1) - vt(i, j, k - 1)) * inv_2dphi
+                    df_dtheta = (vt(i_next, j, k) - vt(i_prev, j, k)) * inv_2dtheta
 
-                    select case (comp)
-                    case (1)
-                        ! Component 1: theta / azimuthal (vt)
-                        if (j == 1) then
-                            df_dr = (-3.0_real64 * vt(i, 1, k) + 4.0_real64 * vt(i, 2, k) - vt(i, 3, k)) * inv_2dr
-                        else if (j == n2) then
-                            df_dr = (3.0_real64 * vt(i, n2, k) - 4.0_real64 * vt(i, n2 - 1, k) + vt(i, n2 - 2, k)) * inv_2dr
-                        else
-                            df_dr = (vt(i, j + 1, k) - vt(i, j - 1, k)) * inv_2dr
-                        end if
-                        df_dphi   = (vt(i, j, k + 1) - vt(i, j, k - 1)) * inv_2dphi
-                        df_dtheta = (vt(i_next, j, k) - vt(i_prev, j, k)) * inv_2dtheta
+                    u_dot_grad_f = vr(i, j, k) * df_dr + &
+                                   (vp(i, j, k) * inv_r) * df_dphi + &
+                                   (vt(i, j, k) * inv_r_sin_phi) * df_dtheta
 
-                        u_dot_grad_f = vr(i, j, k) * df_dr + &
-                                       (vp(i, j, k) * inv_r) * df_dphi + &
-                                       (vt(i, j, k) * inv_r_sin_phi) * df_dtheta
+                    N_shell(i, k) = -( u_dot_grad_f + &
+                                      (vt(i, j, k) * vr(i, j, k) * inv_r) + &
+                                      (vt(i, j, k) * vp(i, j, k) * cot_phi * inv_r) )
 
-                        N_comp(i, j, k) = -( u_dot_grad_f + &
-                                            (vt(i, j, k) * vr(i, j, k) * inv_r) + &
-                                            (vt(i, j, k) * vp(i, j, k) * cot_phi * inv_r) )
+                case (2)
+                    ! Component 2: radial (vr)
+                    if (j == 1) then
+                        df_dr = (-3.0_real64 * vr(i, 1, k) + 4.0_real64 * vr(i, 2, k) - vr(i, 3, k)) * inv_2dr
+                    else if (j == n2) then
+                        df_dr = (3.0_real64 * vr(i, n2, k) - 4.0_real64 * vr(i, n2 - 1, k) + vr(i, n2 - 2, k)) * inv_2dr
+                    else
+                        df_dr = (vr(i, j + 1, k) - vr(i, j - 1, k)) * inv_2dr
+                    end if
+                    df_dphi   = (vr(i, j, k + 1) - vr(i, j, k - 1)) * inv_2dphi
+                    df_dtheta = (vr(i_next, j, k) - vr(i_prev, j, k)) * inv_2dtheta
 
-                    case (2)
-                        ! Component 2: radial (vr)
-                        if (j == 1) then
-                            df_dr = (-3.0_real64 * vr(i, 1, k) + 4.0_real64 * vr(i, 2, k) - vr(i, 3, k)) * inv_2dr
-                        else if (j == n2) then
-                            df_dr = (3.0_real64 * vr(i, n2, k) - 4.0_real64 * vr(i, n2 - 1, k) + vr(i, n2 - 2, k)) * inv_2dr
-                        else
-                            df_dr = (vr(i, j + 1, k) - vr(i, j - 1, k)) * inv_2dr
-                        end if
-                        df_dphi   = (vr(i, j, k + 1) - vr(i, j, k - 1)) * inv_2dphi
-                        df_dtheta = (vr(i_next, j, k) - vr(i_prev, j, k)) * inv_2dtheta
+                    u_dot_grad_f = vr(i, j, k) * df_dr + &
+                                   (vp(i, j, k) * inv_r) * df_dphi + &
+                                   (vt(i, j, k) * inv_r_sin_phi) * df_dtheta
 
-                        u_dot_grad_f = vr(i, j, k) * df_dr + &
-                                       (vp(i, j, k) * inv_r) * df_dphi + &
-                                       (vt(i, j, k) * inv_r_sin_phi) * df_dtheta
+                    N_shell(i, k) = -( u_dot_grad_f - &
+                                      (vt(i, j, k)**2 + vp(i, j, k)**2) * inv_r )
 
-                        N_comp(i, j, k) = -( u_dot_grad_f - &
-                                            (vt(i, j, k)**2 + vp(i, j, k)**2) * inv_r )
+                case (3)
+                    ! Component 3: phi / meridional (vp)
+                    if (j == 1) then
+                        df_dr = (-3.0_real64 * vp(i, 1, k) + 4.0_real64 * vp(i, 2, k) - vp(i, 3, k)) * inv_2dr
+                    else if (j == n2) then
+                        df_dr = (3.0_real64 * vp(i, n2, k) - 4.0_real64 * vp(i, n2 - 1, k) + vp(i, n2 - 2, k)) * inv_2dr
+                    else
+                        df_dr = (vp(i, j + 1, k) - vp(i, j - 1, k)) * inv_2dr
+                    end if
+                    df_dphi   = (vp(i, j, k + 1) - vp(i, j, k - 1)) * inv_2dphi
+                    df_dtheta = (vp(i_next, j, k) - vp(i_prev, j, k)) * inv_2dtheta
 
-                    case (3)
-                        ! Component 3: phi / meridional (vp)
-                        if (j == 1) then
-                            df_dr = (-3.0_real64 * vp(i, 1, k) + 4.0_real64 * vp(i, 2, k) - vp(i, 3, k)) * inv_2dr
-                        else if (j == n2) then
-                            df_dr = (3.0_real64 * vp(i, n2, k) - 4.0_real64 * vp(i, n2 - 1, k) + vp(i, n2 - 2, k)) * inv_2dr
-                        else
-                            df_dr = (vp(i, j + 1, k) - vp(i, j - 1, k)) * inv_2dr
-                        end if
-                        df_dphi   = (vp(i, j, k + 1) - vp(i, j, k - 1)) * inv_2dphi
-                        df_dtheta = (vp(i_next, j, k) - vp(i_prev, j, k)) * inv_2dtheta
+                    u_dot_grad_f = vr(i, j, k) * df_dr + &
+                                   (vp(i, j, k) * inv_r) * df_dphi + &
+                                   (vt(i, j, k) * inv_r_sin_phi) * df_dtheta
 
-                        u_dot_grad_f = vr(i, j, k) * df_dr + &
-                                       (vp(i, j, k) * inv_r) * df_dphi + &
-                                       (vt(i, j, k) * inv_r_sin_phi) * df_dtheta
-
-                        N_comp(i, j, k) = -( u_dot_grad_f + &
-                                            (vp(i, j, k) * vr(i, j, k) * inv_r) - &
-                                            (vt(i, j, k)**2 * cot_phi * inv_r) )
-                    end select
-                end do
-                N_comp(n1, j, k) = N_comp(1, j, k)
+                    N_shell(i, k) = -( u_dot_grad_f + &
+                                      (vp(i, j, k) * vr(i, j, k) * inv_r) - &
+                                      (vt(i, j, k)**2 * cot_phi * inv_r) )
+                end select
             end do
+            N_shell(n1, k) = N_shell(1, k)
         end do
         !$OMP END PARALLEL DO
 
@@ -517,16 +515,48 @@ contains
         !   2. the Driscoll-Healy quadrature weight at k = 1 (phi = 0) is identically zero, and
         !   3. the south pole row k = n3 lies outside the 1..n_lat transform slice.
         if (comp == 2) then
-            do j = 1, n2
-                N_comp(:, j, 1)  = N_comp(:, j, 2)
-                N_comp(:, j, n3) = N_comp(:, j, n3 - 1)
-            end do
+            N_shell(:, 1)  = N_shell(:, 2)
+            N_shell(:, n3) = N_shell(:, n3 - 1)
         else
-            N_comp(:, :, 1)  = 0.0_real64
-            N_comp(:, :, n3) = 0.0_real64
+            N_shell(:, 1)  = 0.0_real64
+            N_shell(:, n3) = 0.0_real64
         end if
 
+    end subroutine compute_advection_shell
+
+    ! Thin wrapper computing one full 3D component of N = -(u . grad)u across all shells.
+    subroutine compute_advection_component(vt, vr, vp, n1, n2, n3, rint, dr, comp, N_comp)
+        integer,           intent(in)  :: n1, n2, n3, comp
+        real(kind=real64), intent(in)  :: vt(n1, n2, n3), vr(n1, n2, n3), vp(n1, n2, n3)
+        real(kind=real64), intent(in)  :: rint, dr
+        real(kind=real64), intent(out) :: N_comp(n1, n2, n3)
+
+        integer :: j
+
+        do j = 1, n2
+            call compute_advection_shell(vt, vr, vp, n1, n2, n3, rint, dr, j, comp, N_comp(:, j, :))
+        end do
     end subroutine compute_advection_component
+
+    ! Computes the physical-space nonlinear transfer integral contribution from a single
+    ! radial shell j: sum_{k, i<n1} u_shell(i,k) * N_shell(i,k) * r_j^2 * dr * d_theta * d_phi * sin(phi_k).
+    pure real(kind=real64) function shell_transfer(u_shell, N_shell, n1, n3, r_j, dr, d_theta, d_phi) result(T_shell)
+        integer,           intent(in) :: n1, n3
+        real(kind=real64), intent(in) :: u_shell(:,:), N_shell(:,:)
+        real(kind=real64), intent(in) :: r_j, dr, d_theta, d_phi
+
+        real(kind=real64) :: phi, sp
+        integer :: i, k
+
+        T_shell = 0.0_real64
+        do k = 1, n3
+            phi = real(k - 1, real64) * d_phi
+            sp  = sin(phi)
+            do i = 1, n1 - 1
+                T_shell = T_shell + u_shell(i, k) * N_shell(i, k) * r_j**2 * dr * d_theta * d_phi * sp
+            end do
+        end do
+    end function shell_transfer
 
 end module advection_mod
 
@@ -849,6 +879,36 @@ contains
         if (calc_flux_local) deallocate(hst, fst, coeffs_N_filt)
     end subroutine compute_volume_spectrum_comp
 
+    ! 7. Wrapper computing both 2D horizontal and 3D volume spectra (and optional transfers)
+    !    for a single spectral component, then freeing its coefficient buffers.
+    subroutine process_component_spectra(coeffs_u, lmax, n_lm, n_shells, comp, &
+                                         binner_H, binner_E, coeffs_N, binner_TH, binner_TV)
+        integer,                 intent(in)    :: lmax, n_lm, n_shells, comp
+        real(kind=real64), allocatable, intent(inout) :: coeffs_u(:,:,:)
+        type(spectral_binner_t), intent(inout) :: binner_H, binner_E
+        real(kind=real64), allocatable, intent(inout), optional :: coeffs_N(:,:,:)
+        type(spectral_binner_t), intent(inout), optional :: binner_TH, binner_TV
+
+        logical :: calc_flux_local
+
+        write(*, '(A, I1, A)') "   -> Computing 2D Horizontal & 3D Volume Spectra (component ", comp, "/3)..."
+
+        calc_flux_local = present(coeffs_N) .and. present(binner_TH) .and. present(binner_TV)
+        if (calc_flux_local) calc_flux_local = allocated(coeffs_N)
+
+        if (calc_flux_local) then
+            call compute_horizontal_spectrum_comp(coeffs_u, lmax, n_lm, n_shells, binner_H, &
+                                                  coeffs_N, binner_TH)
+            call compute_volume_spectrum_comp(coeffs_u, lmax, n_lm, n_shells, comp, binner_E, &
+                                              coeffs_N, binner_TV)
+            deallocate(coeffs_N)
+        else
+            call compute_horizontal_spectrum_comp(coeffs_u, lmax, n_lm, n_shells, binner_H)
+            call compute_volume_spectrum_comp(coeffs_u, lmax, n_lm, n_shells, comp, binner_E)
+        end if
+        deallocate(coeffs_u)
+    end subroutine process_component_spectra
+
 
 end module sht_processing_mod
 
@@ -857,7 +917,7 @@ program sht_3d_utility
     use, intrinsic :: iso_fortran_env, only: real64, error_unit
     use data_io_mod
     use binner_mod, only: spectral_binner_t
-    use advection_mod, only: compute_advection_component
+    use advection_mod, only: compute_advection_shell, shell_transfer
     use sht_processing_mod
     implicit none
 
@@ -873,14 +933,15 @@ program sht_3d_utility
     ! Velocity in spherical coordinates (vt=azimuthal/zonal, vr=radial, vp=polar/meridional)
     real(kind=real64), allocatable :: vt(:,:,:), vr(:,:,:), vp(:,:,:)
 
-    ! Spectral arrays and binners (coeffs_comp is packed triangularly as (2, n_lm, n2))
-    real(kind=real64), allocatable :: coeffs_comp(:,:,:)
+    ! Spectral arrays and binners (packed triangularly as (2, n_lm, n2))
+    real(kind=real64), allocatable :: coeffs_r(:,:,:), coeffs_tor(:,:,:), coeffs_sph(:,:,:)
     type(spectral_binner_t) :: binner_H, binner_E
     real(kind=real64) :: rint, rext, dr
-    integer :: n_bins, comp
+    integer :: n_bins
 
     ! Nonlinear advection and flux variables
-    real(kind=real64), allocatable :: N_comp(:,:,:), coeffs_N_comp(:,:,:)
+    real(kind=real64), allocatable :: Nr_shell(:,:), Nt_shell(:,:), Np_shell(:,:)
+    real(kind=real64), allocatable :: coeffs_Nr(:,:,:), coeffs_Ntor(:,:,:), coeffs_Nsph(:,:,:)
     real(kind=real64), allocatable :: Pi_tot(:), Pi_1(:), Pi_2(:)
     type(spectral_binner_t) :: binner_TH, binner_TV
     real(kind=real64) :: T_phys, T_binned_sum, Pi_max
@@ -977,8 +1038,6 @@ program sht_3d_utility
     lmax = n_lat / 2 - 1
     n_lm = ((lmax + 1) * (lmax + 2)) / 2
 
-    allocate(coeffs_comp(2, n_lm, n2))
-
     ! Number of logarithmic bins (~12 per octave)
     n_bins = max(64, nint(12 * log(real(max(lmax, n2), real64)) / log(2.0_real64)))
 
@@ -986,83 +1045,81 @@ program sht_3d_utility
     call binner_E%init(lmax, n2, rint, rext, n_bins)
 
     if (calc_flux) then
-        allocate(N_comp(n1, n2, n3))
-        allocate(coeffs_N_comp(2, n_lm, n2))
         allocate(Pi_tot(0:n_bins), Pi_1(0:n_bins), Pi_2(0:n_bins))
         call binner_TH%init(lmax, n2, rint, rext, n_bins)
         call binner_TV%init(lmax, n2, rint, rext, n_bins)
         T_phys = 0.0_real64
     end if
 
-    ! Stream velocity components one by one through SHT and spectral binning
-    do comp = 1, 3
-        write(*, '(A, I1, A)') "-> Processing velocity component ", comp, "/3 (SHT + MSCG)..."
+    ! ===== Stage 1: Radial component (scalar SHT, comp = 2) =====
+    write(*, '(A)') "-> Stage 1: Processing radial component (SHT + MSCG)..."
+    allocate(coeffs_r(2, n_lm, n2))
+    if (calc_flux) then
+        allocate(Nr_shell(n1, n3), coeffs_Nr(2, n_lm, n2))
+    end if
+
+    do j = 1, n2
+        call compute_sht_coeffs(vr(1:n_lon, j, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
+                                coeffs_r(:, :, j))
 
         if (calc_flux) then
-            call compute_advection_component(vt, vr, vp, n1, n2, n3, rint, dr, comp, N_comp)
-            do k = 1, n3
-                phi = real(k-1, real64) * pi / real(n3-1, real64)
-                sp = sin(phi)
-                do j = 1, n2
-                    r_j = rint + real(j-1, real64) * dr
-                    do i = 1, n1-1
-                        select case (comp)
-                        case (1)
-                            T_phys = T_phys + vt(i,j,k) * N_comp(i,j,k) * r_j**2 * dr * d_theta * d_phi * sp
-                        case (2)
-                            T_phys = T_phys + vr(i,j,k) * N_comp(i,j,k) * r_j**2 * dr * d_theta * d_phi * sp
-                        case (3)
-                            T_phys = T_phys + vp(i,j,k) * N_comp(i,j,k) * r_j**2 * dr * d_theta * d_phi * sp
-                        end select
-                    end do
-                end do
-            end do
+            r_j = rint + real(j - 1, real64) * dr
+            call compute_advection_shell(vt, vr, vp, n1, n2, n3, rint, dr, j, 2, Nr_shell)
+            T_phys = T_phys + shell_transfer(vr(:, j, :), Nr_shell, n1, n3, r_j, dr, d_theta, d_phi)
+            call compute_sht_coeffs(Nr_shell(1:n_lon, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
+                                    coeffs_Nr(:, :, j))
         end if
 
-        do j = 1, n2
-            ! Compute (l,m)-packed SHT of a 2D spherical slice
-            select case (comp)
-            case (1)
-                call compute_sht_coeffs(vt(1:n_lon, j, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
-                                        coeffs_comp(:, :, j))
-            case (2)
-                call compute_sht_coeffs(vr(1:n_lon, j, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
-                                        coeffs_comp(:, :, j))
-            case (3)
-                call compute_sht_coeffs(vp(1:n_lon, j, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
-                                        coeffs_comp(:, :, j))
-            end select
-
-            if (calc_flux) then
-                call compute_sht_coeffs(N_comp(1:n_lon, j, 1:n_lat), n_lat, n_lon, lmax, &
-                                        n_lm, coeffs_N_comp(:, :, j))
-            end if
-
-            if (mod(j, 25) == 0) write(*,*) "      Progress: shell ", j, "/", n2
-        end do
-
-        write(*,*) "   -> Computing 2D Horizontal Spectrum contribution..."
-        if (calc_flux) then
-            call compute_horizontal_spectrum_comp(coeffs_comp, lmax, n_lm, n2, binner_H, &
-                                                  coeffs_N_comp, binner_TH)
-        else
-            call compute_horizontal_spectrum_comp(coeffs_comp, lmax, n_lm, n2, binner_H)
-        end if
-
-        write(*,*) "   -> Computing 3D Volume Spectrum contribution..."
-        if (calc_flux) then
-            call compute_volume_spectrum_comp(coeffs_comp, lmax, n_lm, n2, comp, binner_E, &
-                                              coeffs_N_comp, binner_TV)
-        else
-            call compute_volume_spectrum_comp(coeffs_comp, lmax, n_lm, n2, comp, binner_E)
-        end if
+        if (mod(j, 25) == 0) write(*,*) "      Progress: shell ", j, "/", n2
     end do
 
-    deallocate(vt, vr, vp)
-    deallocate(coeffs_comp)
     if (calc_flux) then
-        deallocate(N_comp, coeffs_N_comp)
+        deallocate(Nr_shell)
+    else
+        deallocate(vr)
     end if
+
+    call process_component_spectra(coeffs_r, lmax, n_lm, n2, 2, &
+                                   binner_H, binner_E, coeffs_Nr, binner_TH, binner_TV)
+
+    ! ===== Stage 2: Tangential components (comp = 1 and comp = 3) =====
+    write(*, '(A)') "-> Stage 2: Processing tangential components (1/3 and 3/3, SHT)..."
+    allocate(coeffs_tor(2, n_lm, n2), coeffs_sph(2, n_lm, n2))
+    if (calc_flux) then
+        allocate(Nt_shell(n1, n3), Np_shell(n1, n3))
+        allocate(coeffs_Ntor(2, n_lm, n2), coeffs_Nsph(2, n_lm, n2))
+    end if
+
+    do j = 1, n2
+        call compute_sht_coeffs(vt(1:n_lon, j, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
+                                coeffs_tor(:, :, j))
+        call compute_sht_coeffs(vp(1:n_lon, j, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
+                                coeffs_sph(:, :, j))
+
+        if (calc_flux) then
+            r_j = rint + real(j - 1, real64) * dr
+            call compute_advection_shell(vt, vr, vp, n1, n2, n3, rint, dr, j, 1, Nt_shell)
+            call compute_advection_shell(vt, vr, vp, n1, n2, n3, rint, dr, j, 3, Np_shell)
+            T_phys = T_phys + shell_transfer(vt(:, j, :), Nt_shell, n1, n3, r_j, dr, d_theta, d_phi) &
+                            + shell_transfer(vp(:, j, :), Np_shell, n1, n3, r_j, dr, d_theta, d_phi)
+            call compute_sht_coeffs(Nt_shell(1:n_lon, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
+                                    coeffs_Ntor(:, :, j))
+            call compute_sht_coeffs(Np_shell(1:n_lon, 1:n_lat), n_lat, n_lon, lmax, n_lm, &
+                                    coeffs_Nsph(:, :, j))
+        end if
+
+        if (mod(j, 25) == 0) write(*,*) "      Progress: shell ", j, "/", n2
+    end do
+
+    deallocate(vt, vp)
+    if (calc_flux) then
+        deallocate(vr, Nt_shell, Np_shell)
+    end if
+
+    call process_component_spectra(coeffs_tor, lmax, n_lm, n2, 1, &
+                                   binner_H, binner_E, coeffs_Ntor, binner_TH, binner_TV)
+    call process_component_spectra(coeffs_sph, lmax, n_lm, n2, 3, &
+                                   binner_H, binner_E, coeffs_Nsph, binner_TH, binner_TV)
 
     ! 4. Output Horizontal Spectra
     call binner_H%normalize()
