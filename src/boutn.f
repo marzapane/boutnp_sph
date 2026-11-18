@@ -268,6 +268,7 @@ c
           if(cflm.gt.cfllim) go to 165
         endif
         beta=dt/ren*0.5
+        delta=dt*ekm*0.5
         call tschem(time)
 c       call outpf(time)
 c       pause
@@ -1338,19 +1339,23 @@ c         alp dt
 c   bet = -------
 c          2 Re
 c
+c         alp Ek dt
+c   del = ---------
+c             2
+c
 c   The first equation in the introduction of THSCHEM then becomes
 c
 c
-c              2      [            n         n       n-1   alp       2  n ]
-c  (1-bet*nabla ) dQ =[-alp*grad (P ) + gam*H + rho*H   + ----- nabla (Q )]*dt
-c                     [                                    Re             ]
+c              2          [            n         n       n-1   alp       2  n            n]
+c  (1+del-bet*nabla ) dQ =[-alp*grad (P ) + gam*H + rho*H   + ----- nabla (Q ) - alp*Ek*Q ]*dt
+c                         [                                    Re                         ]
 c
 c                                                                      3
 c   The left hand side of this equation is then factored at an order dt
 c   as follows
 c
 c           2           2           2
-c  (1 -bet*d_x)*(1-bet*d_r)*(1-bet*d_th) dQ = RHS
+c  (1+del-bet*d_x)*(1+del-bet*d_r)*(1+del-bet*d_th) dQ = RHS
 c
 c           2     2       2
 c  Where   d_x,  d_r and d_th  are the discrete differential operators of
@@ -1369,7 +1374,7 @@ C       timhd0 = etime_(t)
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,kmv,kpv,n2m,jpv,jmv,n1m,ipv,imv)
 !$OMP$ SHARED(q1,ap1j,ac1j,am1j,ap1k,ac1k,am1k,pr)
-!$OMP$ SHARED(ga,ro,dq,ru1,alre,dt,al,usrm,rhs)
+!$OMP$ SHARED(ga,ro,dq,ru1,alre,dt,al,usrm,rhs,ekm)
 !$OMP$ SHARED(dx1,dx1q,usinpm,fvisc1e,fvisc2e,fvisc3e)
 !$OMP$ PRIVATE(km,kp,jp,jm,ip,im,d11q1,d22q1,d33q1,dcq1,dpx11,iadd)
 !$OMP$ PRIVATE(h11,udx1,udx1nl,udx1q,app,acc,amm,ic,jc,kc)
@@ -1414,12 +1419,16 @@ c   grad(pr) along 1
 c
             dpx11=(pr(ic,jc,kc)-pr(im,jc,kc))*udx1
 c
+c   alpha*Ek*q1(n)
+c
+            ekq1=al*ekm*q1(ic,jc,kc)
+c
             iadd=ic+(jc-1)*n1m+(kc-1)*n1m*n2m
 c
 c   evaluation of RHS
 c
             rhs(iadd)=(ga*dq(ic,jc,kc)+ro*ru1(ic,jc,kc)
-     %                 +alre*dcq1-dpx11)*dt
+     %                 +alre*dcq1-dpx11-ekq1)*dt
 c
 c   updating the nonlinear terms
 c
@@ -1470,7 +1479,7 @@ c
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,kmv,kpv,n2m,n1m,ipv,imv,n2,rc)
 !$OMP$ SHARED(dx1,dx1q,usinpm,fvisc1e,fvisc2e,fvisc3e)
-!$OMP$ SHARED(q2,ap2j,ac2j,am2j,ap2k,ac2k,am2k,pr)
+!$OMP$ SHARED(q2,ap2j,ac2j,am2j,ap2k,ac2k,am2k,pr,ekm)
 !$OMP$ SHARED(ga,ro,dph,ru2,alre,dt,udx2c,usrc,al,rhs)
 !$OMP$ PRIVATE(km,kp,jp,jm,ip,im,d11q2,d22q2,d33q2)
 !$OMP$ PRIVATE(aap,aac,aam,dcq2,dpx22,iadd)
@@ -1516,10 +1525,14 @@ c   component of grad(pr) along 2 direction
 c
             dpx22=(pr(ic,jc,kc)-pr(ic,jm,kc))*udx2
 c
+c   alpha*Ek*q2(n)
+c
+            ekq2=al*ekm*q2(ic,jc,kc)
+c
             iadd=ic+(jc-1)*n1m+(kc-1)*n1m*n2
 c
             rhs(iadd)=(ga*dph(ic,jc,kc)+ro*ru2(ic,jc,kc)
-     %                    +alre*dcq2-dpx22)*dt
+     %                    +alre*dcq2-dpx22-ekq2)*dt
 c
             ru2(ic,jc,kc)=dph(ic,jc,kc)
    26 continue
@@ -1565,7 +1578,7 @@ c
 !$OMP$ SHARED(kmv,jpv,jmv,n3m,n2m,n1m,ipv,imv)
 !$OMP$ SHARED(q3,ap3j,ac3j,am3j,ap3k,ac3k,am3k,pr)
 !$OMP$ SHARED(sinpc,usinpc,dx1,dx1q)
-!$OMP$ SHARED(fvisc1e,fvisc2e,fvisc3e)
+!$OMP$ SHARED(fvisc1e,fvisc2e,fvisc3e,ekm)
 !$OMP$ SHARED(al,ga,ro,qcap,ru3,dq,alre,dt,udx3c,usrm,rhs)
 !$OMP$ PRIVATE(km,kp,jp,jpp,jmm,ip,ipp,imm,dq31,dq32,dq33,dcq3,dpx33)
 !$OMP$ PRIVATE(h31,iadd,aap,aac,aam,udx1q,udx1,udx3,ic,jc,kc)
@@ -1635,12 +1648,16 @@ c  component of grad(pr) along x3 direction
 c
             dpx33=(pr(ic,jc,kc)-pr(ic,jc,km))*udx3
 c
+c   alpha*Ek*q3(n)
+c
+            ekq3=al*ekm*q3(ic,jc,kc)
+c
 c  right hand side of the momentum equation
 c
             iadd=ic+(jc-1)*n1m+(kc-1)*n1m*n2m
 c
             rhs(iadd)=(ga*qcap(ic,jc,kc)+ro*ru3(ic,jc,kc)
-     %                    +alre*dcq3-dpx33)*dt
+     %                    +alre*dcq3-dpx33-ekq3)*dt
 c
 c  updating of the non-linear terms
 c
@@ -2205,9 +2222,10 @@ c
 c
 c   Q_1
 c
-      betadx=beta*dx1q*al
+      upda=1.+delta*al
+      betadx=(beta*dx1q*al)/upda
 !$OMP  PARALLEL DO
-!$OMP$ SHARED(n3m,n2m,n1m,betadx,rhs,usrm,usinpm,fvisc1)
+!$OMP$ SHARED(n3m,n2m,n1m,betadx,upda,rhs,usrm,usinpm,fvisc1)
 !$OMP$ PRIVATE(amil,apil,acil,fil,iadd,faci)
 !$OMP$ PRIVATE(ugmmm,ugm2,ic,jc,kc)
       do kc=1,n3m
@@ -2219,7 +2237,7 @@ c
             amil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
             acil(jc,ic)=1.
             iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2m
-            fil(jc,ic) = rhs(iadd)/faci
+            fil(jc,ic) = rhs(iadd)/faci/upda
           end do
         end do
 c
@@ -2255,7 +2273,8 @@ c
 c  ************ compute dq1  sweeping along the x2 direction
 c               wall boundaries interior points
 c
-      betadx=beta*al
+      upda=1.+delta*al
+      betadx=(beta*al)/upda
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,betadx,rhs,ap1j,ac1j,am1j,fvisc2)
 !$OMP$ PRIVATE(amjl,apjl,acjl,fjl,iadd,faci,nm,ic,ii,jc,kc)
@@ -2326,7 +2345,8 @@ c
 c
 c   compute  from dq** sweeping along the x3 periodic direction
 c
-      betadx=beta*al
+      upda=1.+delta*al
+      betadx=(beta*al)/upda
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,am1k,ac1k,ap1k,fvisc3)
 !$OMP$ SHARED(q1,betadx,rhs)
@@ -2397,9 +2417,10 @@ c
       dimension amil(m2,m1),acil(m2,m1),apil(m2,m1),fil(m2,m1)
 c  ************ compute dq2** sweeping along the x1 direction
 c
-      betadx=beta*al
+      upda=1.+delta*al
+      betadx=(beta*al)/upda
 !$OMP  PARALLEL DO
-!$OMP$ SHARED(n3m,n2m,n2,n1m,betadx,rhs,usrc,udx1qc)
+!$OMP$ SHARED(n3m,n2m,n2,n1m,betadx,upda,rhs,usrc,udx1qc)
 !$OMP$ SHARED(usinpm,fvisc1)
 !$OMP$ PRIVATE(amil,apil,acil,fil,iadd,faci)
 !$OMP$ PRIVATE(ugmmm,ic,jc,kc)
@@ -2412,7 +2433,7 @@ c
          amil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
          acil(jc,ic)=1.
          iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2
-         fil(jc,ic)=rhs(iadd)/faci
+         fil(jc,ic)=rhs(iadd)/faci/upda
         end do
        end do
        do ic=1,n1m
@@ -2454,7 +2475,8 @@ c
       dimension amjl(m2),apjl(m2),acjl(m2),fjl(m1,m2)
 c  ********* compute the dq2* sweeping in the x2 direction
 c            wall boundaries direction
-      betadx=beta*al
+      upda=1.+delta*al
+      betadx=(beta*al)/upda
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,betadx,rhs,n2,ap2j,ac2j,am2j)
 !$OMP$ SHARED(q2,fvisc2)
@@ -2543,7 +2565,8 @@ c
 c  ************ compute dq2 sweeping along the x3 direction
 c               periodic
 c
-      betadx=beta*al
+      upda=1.+delta*al
+      betadx=(beta*al)/upda
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,n2,am2k,ac2k,ap2k,fvisc3)
 !$OMP$ SHARED(q2,betadx,rhs)
@@ -2615,9 +2638,10 @@ c
 c  ************ compute dq3** sweeping along the x1 direction
 c               inflow outflow
 c
-      betadx=beta*al
+      upda=1.+delta*al
+      betadx=(beta*al)/upda
 !$OMP  PARALLEL DO
-!$OMP$ SHARED(n3m,n2m,n1m,betadx,rhs)
+!$OMP$ SHARED(n3m,n2m,n1m,betadx,upda,rhs)
 !$OMP$ SHARED(usrm,udx1qm,imv,ipv,usinpc,fvisc1)
 !$OMP$ PRIVATE(amil,apil,acil,fil,iadd,faci)
 !$OMP$ PRIVATE(ugmmm,ugm2,im,ip,km,ic,jc,kc)
@@ -2632,7 +2656,7 @@ c
             amil(jc,ic)=-ugmmm*fvisc1(jc,kc)/faci
             acil(jc,ic)=1.
             iadd = ic+(jc-1)*n1m+(kc-1)*n1m*n2m
-            fil(jc,ic)=rhs(iadd)/faci
+            fil(jc,ic)=rhs(iadd)/faci/upda
           end do
         end do
 c
@@ -2662,7 +2686,8 @@ c
 c
 c  ************ compute dq3 sweeping along the x2 direction
 c
-      betadx=beta*al
+      upda=1.+delta*al
+      betadx=(beta*al)/upda
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,betadx,rhs,ap3j,am3j,ac3j,fvisc2)
 !$OMP$ PRIVATE(amjl,apjl,acjl,fjl,iadd,faci,nm,ic,ii,jc,kc)
@@ -2732,7 +2757,8 @@ c
 c  ********* compute the dq3* sweeping in the x3 direction
 c
 c
-      betadx=beta*al
+      upda=1.+delta*al
+      betadx=(beta*al)/upda
 c
 !$OMP  PARALLEL DO
 !$OMP$ SHARED(n3m,n2m,n1m,n3)

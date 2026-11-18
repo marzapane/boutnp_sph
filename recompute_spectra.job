@@ -1,0 +1,71 @@
+#!/bin/bash
+#
+#SBATCH --partition=cn                  # Partition
+#SBATCH --job-name=pp_spctr                     # Job Name
+#SBATCH --time=00:20:00                       # WallTime
+
+#SBATCH --ntasks                1       # MUST BE 1
+#SBATCH --ntasks-per-node       1       # MUST BE 1
+#SBATCH --cpus-per-task         128
+#SBATCH --mem 0
+#SBATCH --exclusive
+
+#SBATCH -o slurm.%j.out                 # STDOUT
+#SBATCH -e slurm.%j.err                 # STDERR
+
+#SBATCH --account=ehpc-reg-2023r03-178
+#SBATCH --qos=ehpc-reg-2023r03-178
+
+#SBATCH --mail-type=END
+#SBATCH --mail-user=pierpaolo.bilotto@gssi.it
+
+# ==============================================================================
+# SLURM Wrapper for recompute_spectra.sh
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Usage: $0 /path/to/run/directory/ <r_in>"
+    exit 1
+fi
+
+RUN_DIR="$1"
+R_IN="$2"
+
+# Update this path if your compiled executable is located elsewhere
+COMPUTE_EXEC="/home/pbilotto/boutnp_sph/code/pp_spctr"
+
+if [ ! -f "$COMPUTE_EXEC" ]; then
+    echo "Error: Executable $COMPUTE_EXEC not found."
+    echo "Please compile postprocess_spectrum.f90 first, for example:"
+    echo "gfortran -fdefault-real-8 -fdefault-double-8 -o pp_spctr src/postprocess_spectrum.f90 src/ffts.f"
+    exit 1
+fi
+
+# Enter the run directory
+cd "$RUN_DIR" || { echo "Error: Cannot enter directory $RUN_DIR"; exit 1; }
+
+for file in dati/spbou*.q; do
+    if [ ! -f "$file" ]; then
+        echo "No spbou*.q files found in dati/ directory."
+        break
+    fi
+    
+    # Extract the filename without the path
+    basename=$(basename "$file")
+    
+    # Extract the 6-digit timestep (spbouXXXXXX.q -> XXXXXX)
+    # The prefix 'spbou' is 5 characters long.
+    timestep="${basename:5:6}"
+    
+    # # Skip timesteps before threshold
+    # if [ $((10#$timestep)) -le 45000 ]; then
+    #     continue
+    # fi
+
+    # # Save wrong spectrum file
+    # old_spctr="spctr${timestep}.bin"
+    # if [ -f "$old_spctr" ]; then
+    #     mv "$old_spctr" "spctr${timestep}_wrong.bin"
+    # fi
+    
+    echo "Processing timestep $timestep ..."
+    "$COMPUTE_EXEC" "$timestep" -r="$R_IN"
+done

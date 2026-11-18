@@ -108,7 +108,7 @@ c     real     qqmax,qqtot
       common /trick/  amk(m3),ack(m3),apk(m3)
       common /tscoe/  ga,ro,al,nsst
       common /tscoev/ gam(3),rom(3),alm(3)
-      common /tstep/  dt,beta,ren
+      common /tstep/  dt,beta,ren,delta,ekm
       common /velmax/ vmax(ndv),vmaxo(ndv)
       common /vopa/   vmx,sig,yc2mo,yc3mo
       common /vperin/ vper,rper,lamb,nsect

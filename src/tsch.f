@@ -7,9 +7,9 @@ c   This subroutine manages the whole integration scheme.
 c   The following equations are solved:          
 c   
 c    ~~     n
-c   Q  -  Q                n         n       n-1   alp       2  ~~   n 
-c  --------- = -alp*grad (P ) + gam*H + rho*H   + ----- nabla ( Q + Q )
-c    d t                                          2 Re
+c   Q  -  Q                n         n       n-1   alp       2  ~~   n    alp*Ek   ~~   n
+c  --------- = -alp*grad (P ) + gam*H + rho*H   + ----- nabla ( Q + Q ) - ------ ( Q + Q )
+c    d t                                          2 Re                      2
 c
 c          i                           i               i
 c   where H  are the nonlinear terms, P  the pressure Q  the velocities
